@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { X, Send, Image as ImageIcon } from "lucide-react";
+import { X, Send, ImagePlus, MessageCircle, ShieldCheck, AlertTriangle } from "lucide-react";
 
 export default function ChatModal({ request, currentUser, onClose }: any) {
   const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [imageBase64, setImageBase64] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const fetchMessages = async () => {
@@ -29,22 +31,32 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
     }
   }, [messages]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!text && !imageBase64) return;
-    
+    if ((!text.trim() && !imageBase64) || sending) return;
+
+    setSending(true);
+    setError("");
     try {
       await axios.post(`${import.meta.env.VITE_API_URL}/requests/${request.id}/messages`, {
         senderId: currentUser.id,
         text,
-        imageBase64
+        imageBase64,
       });
       setText("");
       setImageBase64(null);
       fetchMessages();
     } catch (e) {
       console.error(e);
-      alert("Failed to send message");
+      setError("Your message didn’t send. Please try again.");
+    } finally {
+      setSending(false);
     }
   };
 
@@ -57,45 +69,81 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
     }
   };
 
+  const isAdminViewer = currentUser.email === "admin@creh.com";
+  const otherName = isAdminViewer
+    ? `${request.requester?.name ?? "Borrower"} & ${request.resource?.owner?.name ?? "Owner"}`
+    : request.requester?.id === currentUser.id
+    ? request.resource?.owner?.name
+    : request.requester?.name;
+
   return (
-    <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col h-[600px]">
+    <div
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-ink/50 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Chat about ${request.resource.title}`}
+        onClick={(e) => e.stopPropagation()}
+        className="rise flex h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-cream shadow-[0_40px_80px_-20px_rgba(11,42,34,0.6)] sm:h-[38rem] sm:rounded-[2rem]"
+      >
         {/* Header */}
-        <div className="flex justify-between items-center p-4 border-b border-gray-100 bg-gray-50">
-          <div>
-            <h2 className="font-bold text-gray-900">Chat - {request.resource.title}</h2>
-            <p className="text-xs text-gray-500">
-              {currentUser.email === "admin@creh.com" ? "Admin View" : "Direct Message"}
-            </p>
+        <div className="flex items-center justify-between gap-4 border-b border-ink/10 bg-white px-5 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-emerald-600 text-white">
+              {isAdminViewer ? <ShieldCheck className="size-5" /> : <MessageCircle className="size-5" />}
+            </span>
+            <div className="min-w-0">
+              <h2 className="truncate font-display text-lg font-bold leading-tight">{request.resource.title}</h2>
+              <p className="truncate text-xs font-medium text-slate-500">
+                {isAdminViewer ? "Admin view" : "Chat with"} {otherName}
+              </p>
+            </div>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-800">
-            <X className="w-6 h-6" />
+          <button onClick={onClose} aria-label="Close chat" className="grid size-10 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-ink/5 hover:text-ink">
+            <X className="size-5" />
           </button>
         </div>
-        
+
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50" ref={scrollRef}>
+        <div className="flex-1 space-y-4 overflow-y-auto px-5 py-5" ref={scrollRef} aria-live="polite">
           {messages.length === 0 && (
-            <p className="text-center text-gray-400 text-sm py-10">No messages yet. Say hello!</p>
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <span className="grid size-12 place-items-center rounded-2xl bg-emerald-100 text-emerald-700">
+                <MessageCircle className="size-6" />
+              </span>
+              <p className="mt-4 font-display text-lg font-bold">Start the conversation</p>
+              <p className="mt-1 max-w-xs text-sm text-slate-600">Say hello and agree on a pickup time. Photos help too.</p>
+            </div>
           )}
           {messages.map((msg) => {
             const isMe = msg.sender.id === currentUser.id;
             const isAdmin = msg.sender.email === "admin@creh.com";
-            
+
             return (
-              <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                <span className="text-[10px] text-gray-400 mb-1 px-1">
-                  {isAdmin ? "Admin" : msg.sender.name} • {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              <div key={msg.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
+                <span className="mb-1 px-1 text-[11px] font-medium text-slate-500">
+                  {isAdmin ? "Admin" : isMe ? "You" : msg.sender.name} ·{" "}
+                  {new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                 </span>
-                <div className={`max-w-[80%] rounded-2xl p-3 ${
-                  isMe ? 'bg-emerald-600 text-white rounded-tr-none' : 
-                  isAdmin ? 'bg-red-600 text-white rounded-tl-none' : 
-                  'bg-white border border-gray-200 text-gray-800 rounded-tl-none'
-                }`}>
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
+                    isMe
+                      ? "rounded-br-md bg-emerald-600 text-white"
+                      : isAdmin
+                      ? "rounded-bl-md bg-red-700 text-white"
+                      : "rounded-bl-md bg-white text-ink ring-1 ring-ink/10"
+                  }`}
+                >
                   {msg.image_url && (
-                    <img src={`http://localhost:5000${msg.image_url}`} alt="Attached" className="rounded-lg mb-2 max-h-48 object-cover" />
+                    <img
+                      src={`http://localhost:5000${msg.image_url}`}
+                      alt="Attached"
+                      className={`max-h-48 rounded-xl object-cover ${msg.text ? "mb-2" : ""}`}
+                    />
                   )}
-                  {msg.text && <p className="text-sm">{msg.text}</p>}
+                  {msg.text && <p className="text-[15px] leading-snug">{msg.text}</p>}
                 </div>
               </div>
             );
@@ -103,27 +151,45 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
         </div>
 
         {/* Input */}
-        <div className="p-4 bg-white border-t border-gray-100">
+        <div className="border-t border-ink/10 bg-white px-4 py-3">
+          {error && (
+            <p role="alert" className="mb-2 flex items-center gap-2 rounded-xl bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+              <AlertTriangle className="size-3.5 shrink-0" /> {error}
+            </p>
+          )}
           {imageBase64 && (
-            <div className="mb-2 relative inline-block">
-              <img src={imageBase64} alt="Preview" className="h-20 rounded border border-gray-200" />
-              <button onClick={() => setImageBase64(null)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 w-5 h-5 flex items-center justify-center text-xs">&times;</button>
+            <div className="relative mb-2 inline-block">
+              <img src={imageBase64} alt="Preview" className="h-20 rounded-xl object-cover ring-1 ring-ink/10" />
+              <button
+                type="button"
+                onClick={() => setImageBase64(null)}
+                aria-label="Remove photo"
+                className="absolute -right-2 -top-2 grid size-6 place-items-center rounded-full bg-ink text-white transition hover:bg-red-700"
+              >
+                <X className="size-3.5" />
+              </button>
             </div>
           )}
-          <form onSubmit={handleSend} className="flex items-center space-x-2">
-            <label className="cursor-pointer text-gray-400 hover:text-emerald-600 transition p-2 bg-gray-100 rounded-full">
-              <ImageIcon className="w-5 h-5" />
-              <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+          <form onSubmit={handleSend} className="flex items-center gap-2">
+            <label className="grid size-11 shrink-0 cursor-pointer place-items-center rounded-full bg-cream text-slate-600 transition hover:text-emerald-700 focus-within:outline focus-within:outline-2 focus-within:outline-emerald-600" aria-label="Attach photo">
+              <ImagePlus className="size-5" />
+              <input type="file" accept="image/*" className="sr-only" onChange={handleImageUpload} />
             </label>
-            <input 
-              type="text" 
-              placeholder="Type a message..."
+            <input
+              type="text"
+              placeholder="Type a message…"
+              aria-label="Message"
               value={text}
-              onChange={e => setText(e.target.value)}
-              className="flex-1 bg-gray-100 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              onChange={(e) => setText(e.target.value)}
+              className="min-w-0 flex-1 rounded-full bg-cream px-5 py-3 text-[15px] placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
-            <button type="submit" disabled={!text && !imageBase64} className="bg-emerald-600 text-white p-2 rounded-full hover:bg-emerald-700 disabled:opacity-50 transition">
-              <Send className="w-5 h-5" />
+            <button
+              type="submit"
+              disabled={(!text.trim() && !imageBase64) || sending}
+              aria-label="Send message"
+              className="grid size-11 shrink-0 place-items-center rounded-full bg-emerald-600 text-white transition hover:bg-emerald-700 disabled:opacity-40"
+            >
+              <Send className="size-5" />
             </button>
           </form>
         </div>
