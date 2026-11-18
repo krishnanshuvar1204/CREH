@@ -26,7 +26,11 @@ import {
   LocateFixed,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { api, apiError } from "../lib/api";
+import { withMockFallback } from "../mocks/withMockFallback";
+import { mockResources } from "../mocks/fixtures";
+import DemoBadge from "../components/DemoBadge";
+import { useAuthStore } from "../stores/authStore";
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
@@ -65,6 +69,7 @@ export default function DiscoveryPage() {
     zoom: 12,
   });
 
+  const user = useAuthStore((st) => st.user);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [radiusKm, setRadiusKm] = useState(15);
   const [selectedResource, setSelectedResource] = useState<any>(null);
@@ -102,23 +107,19 @@ export default function DiscoveryPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedResource]);
 
-  const { data: resources = [], isLoading } = useQuery({
+  const { data: result, isLoading } = useQuery({
     queryKey: ["resources", viewState.latitude, viewState.longitude, radiusKm],
-    queryFn: async () => {
-      try {
-        const res = await axios.get(`${import.meta.env.VITE_API_URL}/resources/nearby`, {
-          params: { lat: viewState.latitude, lng: viewState.longitude, radiusKm },
-        });
-        return res.data;
-      } catch (err) {
-        // Fallback for visual mock if backend is empty
-        return [
-          { id: 101, title: "DeWalt Power Drill", category: "Tools", description: "Hardly used power drill, perfect for home projects.", is_donation: false, lending_duration_days: 7, location: { coordinates: [-122.41, 37.79] }, owner: { name: "Alice", reputation: 4.8 } },
-          { id: 102, title: "Camping Tent (4 Person)", category: "Outdoors", description: "Waterproof tent, great for weekend trips.", is_donation: false, lending_duration_days: 14, location: { coordinates: [-122.39, 37.81] }, owner: { name: "Bob", reputation: 5.0 } },
-        ];
-      }
-    },
+    queryFn: () =>
+      withMockFallback(
+        async () =>
+          (await api.get("/resources/nearby", { params: { lat: viewState.latitude, lng: viewState.longitude, radiusKm } }))
+            .data as any[],
+        mockResources,
+        { fallbackOnEmpty: true }
+      ),
   });
+  const resources: any[] = useMemo(() => result?.data ?? [], [result]);
+  const isMock = result?.isMock ?? false;
 
   const categories = useMemo(
     () => ["All", ...Array.from(new Set<string>(resources.map((r: any) => r.category).filter(Boolean)))],
@@ -153,25 +154,22 @@ export default function DiscoveryPage() {
   }
 
   async function sendRequest() {
-    const userStr = localStorage.getItem("user");
-    if (!userStr) {
+    if (!user) {
       setRequestStatus("error");
       setRequestMessage("Please log in to send a request.");
       return;
     }
-    const user = JSON.parse(userStr);
     setRequestStatus("sending");
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/requests`, {
+      await api.post("/requests", {
         resourceId: selectedResource.id,
-        requesterId: user.id,
         security_deposit_amount: 50.0,
       });
       setRequestStatus("sent");
       setRequestMessage("Request sent. Check your dashboard to pay the deposit once it’s accepted.");
     } catch (e: any) {
       setRequestStatus("error");
-      setRequestMessage(e.response?.data?.error || "We couldn’t send your request. Please try again.");
+      setRequestMessage(apiError(e, "We couldn’t send your request. Please try again."));
     }
   }
 
@@ -185,7 +183,10 @@ export default function DiscoveryPage() {
       >
         <div className="space-y-4 border-b border-ink/10 p-5">
           <div>
-            <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Discover nearby</h1>
+            <div className="flex items-center justify-between gap-3">
+              <h1 className="text-3xl font-extrabold tracking-[-0.03em]">Discover nearby</h1>
+              {isMock && <DemoBadge />}
+            </div>
             <p className="mt-1 text-sm text-slate-600" aria-live="polite">
               {isLoading ? "Looking around…" : `${visible.length} ${visible.length === 1 ? "item" : "items"} within ${radiusKm} km`}
             </p>
@@ -484,7 +485,7 @@ export default function DiscoveryPage() {
                   {requestStatus === "sent" && <Check className="mt-0.5 size-4 shrink-0" />}
                   <span>
                     {requestMessage}{" "}
-                    {requestStatus === "error" && !localStorage.getItem("user") && (
+                    {requestStatus === "error" && !user && (
                       <Link to="/auth" className="underline underline-offset-2">Log in</Link>
                     )}
                     {requestStatus === "sent" && (

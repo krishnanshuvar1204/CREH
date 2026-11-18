@@ -3,10 +3,17 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "echo \"Testing is manual - see docs/manual-tests/\" && exit 0",
     "dev": "ts-node-dev src/index.ts",
     "start": "ts-node src/index.ts",
-    "seed": "ts-node src/seed.ts"
+    "seed": "ts-node src/seed.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "lint": "tsc --noEmit",
+    "typeorm": "typeorm-ts-node-commonjs -d src/data-source.ts",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d src/data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/data-source.ts",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d src/data-source.ts"
   },
   "keywords": [],
   "author": "",
@@ -22,6 +29,8 @@
     "ioredis": "^5.11.1",
     "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
     "typeorm": "^0.3.31",
     "zod": "^4.6.5"
@@ -35,6 +44,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^26.6.3",
     "nodemon": "^3.1.14",
+    "pino-pretty": "^13.2.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "5.7"

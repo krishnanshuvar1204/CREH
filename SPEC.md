@@ -15,6 +15,11 @@
 5. Do **not** silently resolve an open decision (§5). Ask, or pick the stated default and log it.
 6. Never mark `[x]` unless the acceptance criteria are verifiably met (test, curl, or manual check noted in changelog).
 
+7. **Testing is manual (see §7a).** Do not add Jest/Supertest/Playwright/k6 suites. Instead, every task ends with a manual verification step the dev runs and records in the changelog.
+8. **Mock data is the fallback (see §7b).** When an API call fails or returns nothing usable, the frontend shows clearly-labelled mock data from `frontend/src/mocks/`. Do not remove or replace fallbacks with error-only screens.
+
+**Task checkbox legend:** `[ ]` not started · `[~]` built and AI-verified, **awaiting dev manual sign-off** · `[x]` signed off by a dev (checklist run, recorded in §9).
+
 **Status legend:** ✅ Done · 🟡 Partial · ❌ Not started · ➕ Built but not in PRD · ⚠️ Built but conflicts with PRD/security
 
 ---
@@ -27,7 +32,9 @@
 | Stack in PRD but unused | Redis/ioredis & BullMQ (installed, **zero usage**), Zod (installed, **zero usage**), Zustand (installed, unused), Resend, Cloudinary, FCM, Jest/Supertest/Playwright, Docker, CI |
 | Backend size | ~14 files, ~900 LOC, 5 controllers, 6 entities, 1 router file (rest of routes inline in `index.ts`) |
 | Frontend size | 5 pages + 2 components, ~2,300 LOC; UI polish is ahead of backend maturity |
-| Tests / CI / Docker / migrations | **None** (`synchronize: true`, no test script) |
+| Tests / CI / Docker / migrations | Testing policy: **manual by devs** (no automated suites). Phase 0 added: migrations (`synchronize` off), `docker-compose.yml`, lint/typecheck/build CI workflow, `docs/manual-tests/` |
+| Current phase | **Phase 0 — built, awaiting dev sign-off** (see §6). Snapshot sections 2–4 below describe the *original* audit baseline `58b8de5`; where Phase 0 changed things, the tracker rows are updated and marked. |
+| Mock data | Discovery already falls back to hard-coded mock items when the API fails; policy is to keep and formalise this (§7b) |
 
 **Overall v1 functional-requirement progress (34 FRs):** 2 done, 14 partial, 18 not started → **≈ 26 %** (done = 1, partial = 0.5).
 
@@ -56,7 +63,7 @@
 
 ### Frontend (`frontend/src`)
 - Landing page, Auth page (user/admin toggle, token in `localStorage`), Discovery (Mapbox map, list, search, category chips derived from loaded data, free-only toggle, radius slider 1–N km, request modal), Dashboard (my listings, borrowing/lending request tracker, create-listing form with image + geolocation, return/report-damage flows), Admin dispute panel, Chat modal.
-- Discovery falls back to **hard-coded mock items** when the API call fails.
+- Discovery falls back to **hard-coded mock items** inline in `DiscoveryPage.tsx` when the API call fails (intended behaviour; to be moved to `src/mocks/` and labelled, P0-09).
 - Profile reputation is hard-coded `5.0`.
 
 ---
@@ -70,7 +77,7 @@
 | A-3 | Profile (name, phone, address, avatar, bio) | ❌ | Only `name`; no `/users/me`, no profile UI. |
 | A-4 | Home location via pin/geocode | 🟡 | `User.location` exists but register hard-codes `[-122.4, 37.8]`; no setter endpoint/UI, no geocoding. |
 | A-5 | Community verification + badge | ❌ | Not modelled. |
-| A-6 | Short-lived JWT + rotating refresh; validate every protected route | 🟡 | 1-day access token only; no refresh, **no middleware**. |
+| A-6 | Short-lived JWT + rotating refresh; validate every protected route | 🟡 | **P0:** `requireAuth` middleware now validates the JWT on every protected route and loads the user. Still 1-day access token, no refresh/rotation (Phase 1). |
 | B-1 | Create resource w/ full field set | 🟡 | Has category, title, desc, 1 image, duration, radius, location, donation flag. Missing: `resource_type`, multiple images, owner edit. |
 | B-2 | Seven fixed categories | 🟡 | `category` is free text; UI uses ad-hoc list (Tools/Outdoors…). Not the PRD seven. |
 | B-3 | Signed direct-to-CDN uploads | ❌ | ⚠️ Base64 in JSON body (50 MB limit) → local disk. |
@@ -82,13 +89,13 @@
 | C-4 | Sort by distance and recency | 🟡 | Nearest-first only. |
 | C-5 | `ST_DWithin` + GiST index | 🟡 | `ST_DWithin` used, but column is `geometry` and query casts `::geography` → the GiST index on the geometry column is **not usable**. Fix: `geography(Point,4326)` column or functional index. |
 | D-1 | Request with dates/duration | 🟡 | Request has no dates/duration fields; only `security_deposit_amount`. |
-| D-2 | Owner accept/reject; single active approval | 🟡 | Accept only; no reject; no lock; no ownership check; multiple ACCEPTED possible. |
-| D-3 | Explicit state machine | 🟡 | Different machine (see §4); transitions not validated (any status can be set from any state). |
+| D-2 | Owner accept/reject; single active approval | 🟡 | **P0:** owner-only accept with state guard. Still no reject, no row lock, multiple ACCEPTED possible (Phase 4). |
+| D-3 | Explicit state machine | 🟡 | Different machine (see §4). **P0:** each transition now checks role and current state (409 otherwise); not yet a single transition table. |
 | D-4 | Approve→RESERVED, pickup→BORROWED | 🟡 | Resource stays AVAILABLE after accept; goes BORROWED on deposit payment; no pickup step. |
 | D-5 | Return schedule + overdue flag | ❌ | No `due_date`, no sweep. |
 | D-6 | Donations skip return | ❌ | `is_donation` stored but flow identical to loans. |
 | E-1…E-4 | Notifications (in-app, email, reminders, announcements) | ❌ | No notification entity/endpoint/UI; BullMQ/Redis installed but unused. |
-| F-1 | Ratings & reviews after completion | 🟡 | Backend endpoints exist; no UI, no completed-exchange check, no uniqueness, no participant check. |
+| F-1 | Ratings & reviews after completion | 🟡 | Backend endpoints exist. **P0:** reviewer must be a party of the request and reviewee the other party; rating 1–5 validated. Still no UI, no completed-exchange check, no uniqueness (Phase 6). |
 | F-2 | Reputation score derived | ❌ | Column exists; never computed; UI hard-coded. |
 | F-3 | Verified + milestone badges | ❌ | — |
 | F-4 | Community groups & announcements | ❌ | — |
@@ -100,12 +107,12 @@
 ### Non-functional requirement status
 | NFR | Status | Note |
 |---|---|---|
-| Security (JWT verify, ownership, validation, parameterized queries) | ❌/⚠️ | TypeORM params OK; no authz at all, no Zod, no rate limit, `cors()` open, hard-coded secret fallback. |
+| Security (JWT verify, ownership, validation, parameterized queries) | 🟡 | **P0:** JWT middleware, ownership/role checks, Zod validation on all inputs, no secret fallback, CORS restricted, password hash and user home location no longer returned by the API, image type/size checks. Still missing: rate limiting, helmet, refresh tokens (Phases 1 and 8). |
 | Privacy (obfuscated location until approval) | ❌ | Exact coordinates returned in discovery. |
 | Performance (P95 < 300 ms) | ❌ | Unmeasured; no cache. |
-| Observability | ❌ | `console.log` only; `/api/health` exists. |
-| Maintainability (tests ≥ 70 %, OpenAPI) | ❌ | No tests, no OpenAPI, no migrations. |
-| Usability (responsive, empty/loading/error states) | 🟡 | Good UI work; some mock-data fallbacks mask errors. |
+| Observability | 🟡 | **P0:** pino structured logs with request id, `/api/health` checks the DB. No error tracking or metrics yet (Phase 8). |
+| Maintainability (OpenAPI, typed, layered) | ❌ | No OpenAPI, no migrations. PRD's ≥ 70 % automated coverage target is **replaced by manual test checklists** (§7a). |
+| Usability (responsive, empty/loading/error states) | 🟡 | Good UI work. Mock-data fallback is intentional; it must be visibly labelled so it doesn't mask real failures (§7b). |
 
 ---
 
@@ -122,11 +129,11 @@
 | V7 | Radius | metres, fixed set, `sharing_radius_m` | km decimal, free | Convert to fixed set in Phase 2/3. |
 | V8 | Images | `image_urls[]` via Cloudinary signed upload | single `image_url`, base64 → local disk | Phase 2. |
 | V9 | Resource status | `availability` + `deleted_at` | `status` (3 values) | Rename/extend in Phase 2. |
-| V10 | Users | role, verification_status, phone, address… | name/email/hash/rep/location | Phase 1. Replace `email === admin@creh.com` checks with `role`. |
+| V10 | Users | role, verification_status, phone, address… | name/email/hash/rep/location/**role** | `role` and role-based admin checks done in P0; remaining fields in Phase 1. |
 | V11 | Request fields | dates, due_date, timestamps, `owner_id` | none of these; owner via `resource.owner` | Phase 4. |
 | V12 | Map provider | Mapbox recommended | Mapbox ✅ | Aligned. |
-| V13 | Layering | modules: auth/users/resources/geo/requests… + services | fat controllers, inline routes in `index.ts` | Phase 0 refactor to routes→controller→service. |
-| V14 | Schema mgmt | migrations | `synchronize: true` | Phase 0. |
+| V13 | Layering | modules: auth/users/resources/geo/requests… + services | ~~fat controllers, inline routes~~ → **resolved in P0**: routes → controllers → services, Zod schemas, middleware | Done (awaiting sign-off). |
+| V14 | Schema mgmt | migrations | ~~`synchronize: true`~~ → **resolved in P0**: baseline + AddUserRole migrations | Done (awaiting sign-off). Existing dev DBs must be recreated (README). |
 
 ---
 
@@ -140,6 +147,8 @@
 | D-004 | Real third-party providers now or adapters + local fallbacks first? | Adapter interface + local/console implementation first; plug Resend/Cloudinary in their phase | **OPEN** |
 | D-005 | Timeline / team size (PRD assumes 9 × 2-week sprints for a pair) | Solo, phases are effort-based, no fixed dates until set in §6 | **OPEN** |
 | D-006 | Distance unit exposure (km in UI vs metres in API) | UI shows m/km, API uses metres | **OPEN** |
+| D-007 | Testing approach | **Manual testing by devs**; no automated test suites in v1. Supersedes PRD §12 | **DECIDED** |
+| D-008 | Failure behaviour of frontend data calls | **Fall back to mock data** (labelled "Demo data") instead of error-only screens | **DECIDED** |
 
 ---
 
@@ -149,7 +158,7 @@
 
 | Phase | Theme | PRD sprint | Remaining SP | Target date | Status |
 |---|---|---|---|---|---|
-| 0 | Stabilize & align foundation (new) | 0 (+ gaps) | ~20 | _TBD_ | ❌ |
+| 0 | Stabilize & align foundation (new) | 0 (+ gaps) | ~0 (dev sign-off pending) | _TBD_ | 🟡 built, awaiting sign-off |
 | 1 | Identity & user management | 1 | ~20 | _TBD_ | 🟡 |
 | 2 | Resource sharing core | 2 | ~16 | _TBD_ | 🟡 |
 | 3 | Location-based discovery | 3 | ~12 | _TBD_ | 🟡 |
@@ -161,18 +170,28 @@
 
 ### Phase 0 — Stabilize & align foundation  *(blocking; do first)*
 **Goal:** make the existing code safe to build on. Nothing below adds user-visible features.
-- [ ] **P0-01** Add `auth` middleware (verify JWT → `req.user`); remove all identity-from-body/param usage (`requesterId`, `ownerId`, `senderId`, `:userId`) in favour of `req.user.id`. *(3 SP)*
-- [ ] **P0-02** Move inline routes out of `index.ts` into `routes/*.routes.ts`; introduce `services/` layer; remove `/api/resources/seed` from production routes (dev-only). *(3 SP)*
-- [ ] **P0-03** Zod validation schemas at API boundary (auth, resource, request, review, chat); central error handler; consistent error shape. *(3 SP)*
-- [ ] **P0-04** Env config: required `JWT_SECRET` (no fallback), `.env.example` for backend + frontend (`VITE_API_URL`, `VITE_MAPBOX_TOKEN`), restricted CORS. *(2 SP)*
-- [ ] **P0-05** Turn off `synchronize`; set up TypeORM migrations with baseline migration; enable PostGIS extension in migration. *(3 SP)*
-- [ ] **P0-06** Add `role` (`member|admin`) to `User`; replace every `email === "admin@creh.com"` check (frontend + backend) with role; admin-only guard for `/api/disputes*`. *(2 SP)*
-- [ ] **P0-07** Dev tooling: backend lint + typecheck scripts, Jest + Supertest scaffold with test DB, `docker-compose.yml` (Postgres+PostGIS, Redis), GitHub Actions (lint→typecheck→test). *(4 SP)*
-- [ ] **P0-08** Structured logging (pino) + request-id; keep `/api/health` incl. DB check. *(2 SP)*
-- [ ] **P0-09** Frontend: central axios instance with auth header + 401 handling; remove mock-data fallback in Discovery (show error state instead); use `zustand` or React Query for auth state. *(2 SP)*
-- [ ] **P0-10** Rewrite root `README.md` to match reality (run steps, env, scripts); link this SPEC. *(1 SP)*
+- [~] **P0-01** Add `auth` middleware (verify JWT → `req.user`); remove all identity-from-body/param usage (`requesterId`, `ownerId`, `senderId`, `:userId`) in favour of `req.user.id`. *(3 SP)*
+- [~] **P0-02** Move inline routes out of `index.ts` into `routes/*.routes.ts`; introduce `services/` layer; remove `/api/resources/seed` from production routes (dev-only). *(3 SP)*
+- [~] **P0-03** Zod validation schemas at API boundary (auth, resource, request, review, chat); central error handler; consistent error shape. *(3 SP)*
+- [~] **P0-04** Env config: required `JWT_SECRET` (no fallback), `.env.example` for backend + frontend (`VITE_API_URL`, `VITE_MAPBOX_TOKEN`), restricted CORS. *(2 SP)*
+- [~] **P0-05** Turn off `synchronize`; set up TypeORM migrations with baseline migration; enable PostGIS extension in migration. *(3 SP)*
+- [~] **P0-06** Add `role` (`member|admin`) to `User`; replace every `email === "admin@creh.com"` check (frontend + backend) with role; admin-only guard for `/api/disputes*`. *(2 SP)*
+- [~] **P0-07** Dev tooling: backend lint + typecheck scripts, `docker-compose.yml` (Postgres+PostGIS, Redis), optional GitHub Actions (lint→typecheck→build only; no test job). Create `docs/manual-tests/` with a checklist template (§7a). *(3 SP)*
+- [~] **P0-08** Structured logging (pino) + request-id; keep `/api/health` incl. DB check. *(2 SP)*
+- [~] **P0-09** Frontend: central axios instance with auth header + 401 handling; move inline mock data to `frontend/src/mocks/` with a small `withMockFallback(fetcher, mock)` helper and a visible "Demo data" badge when active; use `zustand` or React Query for auth state. *(2 SP)*
+- [~] **P0-10** Rewrite root `README.md` to match reality (run steps, env, scripts); link this SPEC. *(1 SP)*
 
-**Exit criteria:** all mutating routes reject unauthenticated calls; a non-owner cannot accept/return/review someone else's request; CI green; fresh clone runs via `docker compose up` + `npm run migration:run && npm run seed`.
+**Exit criteria:** all mutating routes reject unauthenticated calls; a non-owner cannot accept/return/review someone else's request (verified manually with two accounts); lint/typecheck pass; fresh clone runs via `docker compose up` + `npm run migration:run && npm run seed`; Phase 0 manual checklist signed off.
+
+**Build notes / deviations (2026-11-18):**
+- Checklist: [docs/manual-tests/phase-0.md](docs/manual-tests/phase-0.md). To close the phase, a dev runs it and ticks it, then flips `[~]` → `[x]` above.
+- Identity now comes only from the JWT. API paths changed: `/users/:id/requests|resources` → `/users/me/requests|resources`; request bodies no longer carry `requesterId`/`ownerId`/`senderId`/`reviewerId`.
+- `password_hash` and `users.location` are `select: false`, so they are never serialized in API responses.
+- Backend "lint" is a TypeScript typecheck alias (no ESLint added). CI runs typecheck + frontend lint/build only (no tests, per D-007).
+- Mock fallback applies to Discovery, Dashboard and Admin reads. Chat polling is exempt (a fake conversation would mislead); chat errors surface normally.
+- `uploads/` image handling still base64 → local disk (Phase 2 replaces it), now limited to PNG/JPEG/WebP/GIF and 8 MB.
+- Deliberately not changed: ID type (D-003), deposit/dispute and chat flow (D-001/D-002 still open), category free text.
+- Local setup needs a new `JWT_SECRET` in `backend/.env`; existing dev DBs must be recreated before running migrations (see README).
 
 ### Phase 1 — Identity & user management  *(FR-A-1…6)*
 - [ ] **P1-01** User schema: `phone, address, avatar_url, bio, verification_status, role, deleted/suspended_at`. *(2 SP)*
@@ -197,12 +216,12 @@
 - [ ] **P3-02** `GET /discovery/nearby` with validated params: radius ∈ {500,1000,2000,5000} m, `category[]`, `availability`, `sort=distance|recent`, limit/pagination; exclude soft-deleted/hidden. *(5 SP)*
 - [ ] **P3-03** Location obfuscation: snapped/jittered coordinates in discovery; exact pickup returned only after approval (depends on P4). *(3 SP)*
 - [ ] **P3-04** Frontend: discrete radius selector, multi-category + availability filters server-driven, sort control; home-location default centre. *(4 SP)*
-- [ ] **P3-05** Tests: radius correctness fixtures, `EXPLAIN` asserts index scan, P95 < 300 ms check at 5 km. *(3 SP)*
+- [ ] **P3-05** Manual verification: seed fixtures at known distances and confirm each radius includes/excludes the right items; run `EXPLAIN ANALYZE` in psql and confirm an index scan; eyeball response time at 5 km (target < 300 ms). Record results. *(2 SP)*
 
 ### Phase 4 — Request & exchange lifecycle  *(FR-D-1…6, §8)*
 - [ ] **P4-01** Resolve D-001; define final state enum + legal-transition table in one `requestStateMachine.ts` (unit-tested). Add: `requested_start/end`, `due_date`, `owner_id`, `approved_at/picked_up_at/returned_at`, `OVERDUE`, `CANCELLED`, `SUPERSEDED`. *(5 SP)*
 - [ ] **P4-02** Endpoints: create (with dates), approve, reject, cancel, pickup, return, with ownership + state guards (replaces accept/pay/review-return or maps onto them). *(5 SP)*
-- [ ] **P4-03** Locked approval transaction (`SELECT … FOR UPDATE`; resource→RESERVED; supersede competing requests) + parallel-request concurrency test. *(8 SP)*
+- [ ] **P4-03** Locked approval transaction (`SELECT … FOR UPDATE`; resource→RESERVED; supersede competing requests) + manual concurrency check (two browsers/curl scripts approving two requests for the same item at once; exactly one succeeds). *(7 SP)*
 - [ ] **P4-04** Donations skip return (→COMPLETED on pickup). *(1 SP)*
 - [ ] **P4-05** Overdue flagging (partial index on `due_date`; sweep hook for Phase 5 scheduler). *(2 SP)*
 - [ ] **P4-06** Frontend: request form with dates, owner/borrower dashboards updated to new statuses; reveal exact pickup after approval. *(4 SP)*
@@ -232,7 +251,7 @@
 ### Phase 8 — Hardening & release
 - [ ] **P8-01** Redis cache for nearby search (geohash+radius+filter key, TTL, invalidation on listing change). *(6 SP)*
 - [ ] **P8-02** Security pass: authz audit of every route, validation sweep, rate limits on writes, helmet, secrets review. *(5 SP)*
-- [ ] **P8-03** Coverage ≥ 70 % on requests/geo/reputation; Playwright E2E (register→verify→list→discover→request→return→review); k6 load test + fixes. *(6 SP)*
+- [ ] **P8-03** Full manual regression pass over every phase checklist, including the end-to-end journey (register→verify→list→discover→request→return→review) on desktop and mobile widths; manual latency spot-checks on nearby search; fix findings. *(4 SP)*
 - [ ] **P8-04** Docs: OpenAPI spec, README, ER diagram, runbook; error tracking (Sentry) on API + client. *(5 SP)*
 
 ---
@@ -241,13 +260,41 @@
 - Every new endpoint: auth middleware → Zod validation → ownership/role check → service → controller; documented in OpenAPI once Phase 8 starts (add annotations as you go).
 - Third-party calls only through adapters (`EmailProvider`, `ImageStorage`, `Geocoder`, `PushProvider`); each has a local/dev implementation.
 - Schema changes only via migrations after P0-05.
-- Add/maintain tests for the touched module in the same PR (state machine, geo, reputation get coverage gates).
+- Update the phase's manual checklist in the same PR as the code change (see §7a).
 - Exact coordinates and emails are never returned from public/discovery endpoints.
 
+## 7a. Manual testing policy (replaces PRD §12)
+- **No automated test suites** in v1 (no Jest, Supertest, Playwright, k6). PRD's ≥ 70 % coverage gate and success metric are dropped; the PRD "core-module coverage" metric is replaced by "all manual checklist items pass".
+- **Who/when:** the dev who builds a task runs its checklist before ticking it; a second dev (or the owner) re-runs the phase checklist at phase end.
+- **Where:** `docs/manual-tests/phase-N.md`, one file per phase, each item written as `Steps → Expected result → [ ] Pass`. Record date + tester in the changelog (§9).
+- **Test data:** use the seeded accounts (`admin@creh.com`, `test@creh.com`) plus a second self-registered user for two-party flows.
+- **Minimum checks per phase:**
+  - P0: unauthenticated call to every mutating route → 401; user B cannot act on user A's request/resource.
+  - P1: register, verify, login, refresh, logout, unverified user blocked from listing/requesting.
+  - P2: create/edit/pause/delete listing, image upload visible via CDN URL, soft-deleted item hidden but history intact.
+  - P3: each radius, category and availability filter, sort order, exact location not exposed.
+  - P4: every legal transition works, every illegal transition is rejected, double-approval race, donation skips return.
+  - P5: in-app + email notification per event, reminder fires (shorten due dates/intervals for testing), email failure retried.
+  - P6: review allowed once per direction only after completion, reputation updates, group announcement delivery.
+  - P7: non-admin blocked from `/admin/*`, suspend/hide/resolve flows, analytics numbers match DB counts.
+  - P8: cache hit vs invalidation after listing change, full end-to-end journey, mobile layout.
+- Verification evidence for AI agents: provide the exact curl/UI steps for the dev to run; never claim a task is "tested" without the dev's recorded result.
+
+## 7b. Mock data fallback policy
+- **Rule:** if a frontend data request fails (network error, 5xx, empty response during dev), the UI renders mock data instead of a blank/error page, and shows a visible **"Demo data"** badge/banner so devs and users can tell it is not real.
+- **Location:** all mock fixtures live in `frontend/src/mocks/` (e.g. `resources.ts`, `requests.ts`, `notifications.ts`, `reviews.ts`, `adminAnalytics.ts`), typed with the same TypeScript types as the real API responses so they cannot drift silently.
+- **Helper:** one shared `withMockFallback(fetcher, mock)` (or React Query `placeholderData`/`select` wrapper) used by every page; no ad-hoc inline mock arrays.
+- **Scope:** new features in each phase ship with a matching mock fixture (e.g. Phase 5 notification centre must render with mock notifications when the API is down).
+- **Mutations:** write actions (create, approve, pay…) do **not** pretend to succeed on failure; show the error toast. Only reads fall back.
+- **Safety:** mocks are never returned by the backend, never contain real user data, and the "Demo data" state must be disabled or hidden in production builds unless `VITE_ENABLE_MOCK_FALLBACK=true`. Default: enabled in dev, enabled in demo builds.
+- **Backend side:** `seed.ts` remains the source of sample data for local/demo databases; `/resources/seed` stays dev-only (P0-02).
+
 ## 8. Out of scope for v1 (do not build)
-Native apps, AI recommendations, QR handover, gamified leaderboards, multi-language UI, carbon dashboard, NGO/municipal integrations, emergency mode. *(In-app chat: see D-002.)*
+Automated test suites (see §7a), native apps, AI recommendations, QR handover, gamified leaderboards, multi-language UI, carbon dashboard, NGO/municipal integrations, emergency mode. *(In-app chat: see D-002.)*
 
 ## 9. Changelog
 | Date | Phase/Task | Change | Verified by |
 |---|---|---|---|
 | 2026-11-17 | — | Initial audit and SPEC created from commit `58b8de5` | code review |
+| 2026-11-18 | Phase 0 | P0-01…P0-10 built (auth middleware, services/routes split, Zod, env, migrations, roles, docker-compose + CI, pino, frontend api/store/mocks, README). Marked `[~]`. | AI-run: backend `tsc` clean; frontend `tsc -b` + `vite build` pass; 47/47 curl checks against a throwaway PostGIS DB (auth, validation, ownership, lifecycle, admin gating, no hash leak). **Dev sign-off of docs/manual-tests/phase-0.md still required.** |
+| 2026-11-18 | Policy | Testing switched to manual (D-007, §7a); mock-data fallback adopted (D-008, §7b); tasks P0-07, P0-09, P3-05, P4-03, P8-03 adjusted | spec edit |

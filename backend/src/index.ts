@@ -1,69 +1,50 @@
+import "reflect-metadata";
 import express from "express";
 import cors from "cors";
-import * as dotenv from "dotenv";
-import { AppDataSource } from "./data-source";
-import resourceRoutes from "./routes/resource.routes";
-import { register, login } from "./controllers/AuthController";
-import { createRequest, acceptRequest, processPayment, returnResource, ownerReviewReturn, resolveDispute, getUserRequests, getDisputes } from "./controllers/RequestController";
-import { addReview, getUserReviews } from "./controllers/ReviewController";
-
 import path from "path";
-
-dotenv.config();
+import crypto from "crypto";
+import pinoHttp from "pino-http";
+import { env } from "./config/env";
+import { logger } from "./lib/logger";
+import { AppDataSource } from "./data-source";
+import routes from "./routes";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+app.use(
+    pinoHttp({
+        logger,
+        genReqId: (req, res) => {
+            const id = (req.headers["x-request-id"] as string) || crypto.randomUUID();
+            res.setHeader("x-request-id", id);
+            return id;
+        },
+    })
+);
+app.use(cors({ origin: env.CORS_ORIGIN }));
+// Images still travel as base64 until signed uploads land (Phase 2); each image is capped at 8 MB.
+app.use(express.json({ limit: "12mb" }));
 
 // Serve uploaded files
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-const PORT = process.env.PORT || 5000;
-
-app.use("/api/resources", resourceRoutes);
-
-// Auth
-app.post("/api/auth/register", register);
-app.post("/api/auth/login", login);
-
-// User Resources
-import { getUserResources } from "./controllers/ResourceController";
-app.get("/api/users/:userId/resources", getUserResources);
-
-// Requests / Payments / Escrow
-app.post("/api/requests", createRequest);
-app.get("/api/users/:userId/requests", getUserRequests);
-app.post("/api/requests/:requestId/accept", acceptRequest);
-app.post("/api/requests/:requestId/pay", processPayment);
-app.post("/api/requests/:requestId/return", returnResource);
-app.post("/api/requests/:requestId/review-return", ownerReviewReturn);
-
-// Admin Disputes
-app.get("/api/disputes", getDisputes);
-app.post("/api/disputes/:disputeId/resolve", resolveDispute);
-
-// Reviews
-app.post("/api/reviews", addReview);
-app.get("/api/users/:userId/reviews", getUserReviews);
-
-// Chat
-import { getMessages, sendMessage } from "./controllers/ChatController";
-app.get("/api/requests/:requestId/messages", getMessages);
-app.post("/api/requests/:requestId/messages", sendMessage);
-
-app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
+app.get("/api/health", async (_req, res) => {
+    const dbUp = AppDataSource.isInitialized && (await AppDataSource.query("SELECT 1").then(() => true, () => false));
+    res.status(dbUp ? 200 : 503).json({ status: dbUp ? "ok" : "degraded", db: dbUp ? "up" : "down" });
 });
+
+app.use("/api", routes);
+
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 AppDataSource.initialize()
     .then(() => {
-        console.log("Data Source has been initialized!");
-        
-        app.listen(PORT, () => {
-            console.log(`Server is running on port ${PORT}`);
-        });
+        logger.info("Data source initialized");
+        app.listen(env.PORT, () => logger.info(`Server is running on port ${env.PORT}`));
     })
     .catch((err) => {
-        console.error("Error during Data Source initialization", err);
+        logger.error({ err }, "Error during data source initialization");
+        process.exit(1);
     });

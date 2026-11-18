@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import axios from "axios";
+import { api, apiError } from "../lib/api";
 import { X, Send, ImagePlus, MessageCircle, ShieldCheck, AlertTriangle } from "lucide-react";
 
 export default function ChatModal({ request, currentUser, onClose }: any) {
@@ -12,7 +12,7 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
 
   const fetchMessages = async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/requests/${request.id}/messages`);
+      const res = await api.get(`/requests/${request.id}/messages`);
       setMessages(res.data);
     } catch (e) {
       console.error(e);
@@ -44,8 +44,7 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
     setSending(true);
     setError("");
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/requests/${request.id}/messages`, {
-        senderId: currentUser.id,
+      await api.post(`/requests/${request.id}/messages`, {
         text,
         imageBase64,
       });
@@ -54,7 +53,7 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
       fetchMessages();
     } catch (e) {
       console.error(e);
-      setError("Your message didn’t send. Please try again.");
+      setError(apiError(e, "Your message didn’t send. Please try again."));
     } finally {
       setSending(false);
     }
@@ -69,7 +68,7 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
     }
   };
 
-  const isAdminViewer = currentUser.email === "admin@creh.com";
+  const isAdminViewer = currentUser.role === "admin";
   const otherName = isAdminViewer
     ? `${request.requester?.name ?? "Borrower"} & ${request.resource?.owner?.name ?? "Owner"}`
     : request.requester?.id === currentUser.id
@@ -119,7 +118,7 @@ export default function ChatModal({ request, currentUser, onClose }: any) {
           )}
           {messages.map((msg) => {
             const isMe = msg.sender.id === currentUser.id;
-            const isAdmin = msg.sender.email === "admin@creh.com";
+            const isAdmin = msg.sender.role === "admin";
 
             return (
               <div key={msg.id} className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>

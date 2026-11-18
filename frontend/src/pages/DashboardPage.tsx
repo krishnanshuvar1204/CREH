@@ -17,7 +17,11 @@ import {
   Clock,
   AlertTriangle,
 } from "lucide-react";
-import axios from "axios";
+import { api, apiError } from "../lib/api";
+import { withMockFallback } from "../mocks/withMockFallback";
+import { mockRequests, mockResources } from "../mocks/fixtures";
+import DemoBadge from "../components/DemoBadge";
+import { isAdmin as hasAdminRole, useAuthStore } from "../stores/authStore";
 import { Link, useNavigate } from "react-router-dom";
 import ChatModal from "../components/ChatModal";
 
@@ -46,9 +50,10 @@ const inputCls =
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const userStr = localStorage.getItem("user");
-  const user = userStr ? JSON.parse(userStr) : null;
+  const user = useAuthStore((st) => st.user);
   const userId = user?.id;
+  const userName = user?.name ?? "You";
+  const [isMock, setIsMock] = useState(false);
   const [requests, setRequests] = useState<any[]>([]);
   const [myResources, setMyResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,18 +71,22 @@ export default function DashboardPage() {
   const load = useCallback(async () => {
     if (!userId) return;
     try {
-      const [reqRes, resRes] = await Promise.all([
-        axios.get(`${import.meta.env.VITE_API_URL}/users/${userId}/requests`),
-        axios.get(`${import.meta.env.VITE_API_URL}/users/${userId}/resources`),
-      ]);
-      setRequests(reqRes.data);
-      setMyResources(resRes.data);
+      const res = await withMockFallback(
+        async () => {
+          const [reqRes, resRes] = await Promise.all([api.get("/users/me/requests"), api.get("/users/me/resources")]);
+          return { requests: reqRes.data as any[], resources: resRes.data as any[] };
+        },
+        () => ({ requests: mockRequests(userId, userName) as any[], resources: mockResources() as any[] })
+      );
+      setRequests(res.data.requests);
+      setMyResources(res.data.resources);
+      setIsMock(res.isMock);
     } catch (e) {
       console.error(e);
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, userName]);
 
   useEffect(() => {
     load();
@@ -108,11 +117,11 @@ export default function DashboardPage() {
   const act = async (reqId: number, path: string, okText: string, body?: object) => {
     setBusyId(reqId);
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/requests/${reqId}/${path}`, body);
+      await api.post(`/requests/${reqId}/${path}`, body);
       await load();
       setToast({ text: okText, tone: "ok" });
     } catch (e: any) {
-      setToast({ text: e.response?.data?.error || "That didn’t go through. Please try again.", tone: "err" });
+      setToast({ text: apiError(e, "That didn’t go through. Please try again."), tone: "err" });
     } finally {
       setBusyId(null);
     }
@@ -159,8 +168,7 @@ export default function DashboardPage() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
-          await axios.post(`${import.meta.env.VITE_API_URL}/resources`, {
-            ownerId: user.id,
+          await api.post("/resources", {
             title: formData.get("title"),
             description: formData.get("description"),
             category: formData.get("category"),
@@ -175,7 +183,7 @@ export default function DashboardPage() {
           setTab("items");
           setToast({ text: "Your item is live for the community.", tone: "ok" });
         } catch (err) {
-          setFormError("We couldn’t list your item. Please try again.");
+          setFormError(apiError(err, "We couldn’t list your item. Please try again."));
         } finally {
           setIsSubmitting(false);
         }
@@ -298,11 +306,12 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            {user.email === "admin@creh.com" && (
+            {hasAdminRole(user) && (
               <button onClick={() => navigate("/admin")} className="flex items-center gap-2 rounded-full bg-red-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-red-700">
                 <ShieldAlert className="size-4" /> Admin panel
               </button>
             )}
+            {isMock && <DemoBadge className="self-center" />}
             <button onClick={() => setIsAddingResource(true)} className="flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-white transition duration-300 hover:-translate-y-0.5">
               <Plus className="size-4" /> Share an item
             </button>

@@ -1,98 +1,102 @@
-# Community Resource Exchange Hub (CREH) 🌍🤝
+# Community Resource Exchange Hub (CREH)
 
-**Share More. Buy Less.**  
-CREH is a full-stack web application designed to connect neighbors and community members, allowing them to securely lend, borrow, and share physical resources (tools, electronics, outdoor gear, etc.). Built with trust and security in mind, CREH features a robust Escrow system, Geospatial mapping, and integrated Dispute resolution.
+**Share more. Buy less.** CREH is a full-stack web app that lets neighbours lend, borrow and share physical resources within a radius of their location. It includes geospatial discovery, a request lifecycle with a mock security deposit, per-request chat, and admin dispute resolution.
 
----
+Development is spec-driven and phased. See **[SPEC.md](SPEC.md)** for the PRD-to-code tracker, current phase and decisions, and **[docs/manual-tests/](docs/manual-tests/)** for the manual test checklists (testing is manual by policy).
 
-## 🚀 Key Features
+## Tech stack
+- **Frontend:** Vite, React 19 (TypeScript), Tailwind CSS v4, React Query, Zustand, react-map-gl + Mapbox
+- **Backend:** Node.js, Express 5 (TypeScript), TypeORM, Zod, pino
+- **Data:** PostgreSQL + PostGIS (Redis is provisioned for later phases)
 
-### 1. Geospatial Discovery (PostGIS + Mapbox)
-* **Real-time Map Exploration:** Browse items dynamically rendered on an interactive map.
-* **Precise Geofencing:** Uses PostgreSQL's `ST_DWithin` geography casting to accurately filter resources by physical radius (in kilometers) relative to the map center.
-* **Smart Geolocation:** Automatically requests GPS permissions to pin your exact location (blue dot) while leaving you free to pan the map and explore other neighborhoods.
+## Quick start
 
-### 2. Comprehensive Escrow & Lending State Machine
-The core of CREH is a safe borrowing lifecycle designed to protect lenders:
-* `PENDING`: A user requests to borrow an item.
-* `ACCEPTED`: The owner approves the request. (Unlocks Direct Chat).
-* `ACTIVE`: The borrower pays a mock **Security Deposit** into Escrow, and takes possession of the item.
-* `RETURNED_PENDING_REVIEW`: The borrower returns the item.
-* `COMPLETED`: The owner confirms the item is okay; Escrow refunds the borrower fully.
-* `DISPUTED`: The owner reports damage/missing items; Escrow is frozen and an Admin is summoned.
+Prerequisites: Node 22+, Docker (or your own PostgreSQL with PostGIS).
 
-### 3. Integrated Direct Chat & Photo Uploads
-* **Pre-Exchange Coordination:** Once a request is `ACCEPTED`, a private chat thread opens between the borrower and owner.
-* **Photo Attachments:** Users can snap photos (saved securely on the backend) to document the condition of an item before handing it off, or just share visual instructions.
-* **Live Polling:** Chat updates automatically in the background.
+```bash
+# 1. Database (PostGIS) and Redis
+docker compose up -d
 
-### 4. Admin Dispute Resolution Panel
-* **Admin Dashboard:** Accessible only via the `admin@creh.com` account.
-* **Dispute Oversight:** Admins can view all escalated tickets, including full contact details (Name/Email) for both parties.
-* **Chat Interception:** Admins can join the active chat thread for a disputed item to request photos of the damage or mediate the conversation.
-* **Financial Authority:** Admins have the final say to click **Rule for Requester (Refund Deposit)** or **Rule for Owner (Pay Escrow to Owner)**, instantly resolving the transaction.
+# 2. Backend
+cd backend
+cp .env.example .env            # then set JWT_SECRET (see the comment in the file)
+npm install
+npm run migration:run           # creates the schema; synchronize is OFF
+npm run seed                    # admin + test users and sample items
+npm run dev                     # http://localhost:5000  (health: /api/health)
 
-### 5. Role-Based Authentication (JWT)
-* Seamless Registration and Login flows.
-* Dynamic UI toggle for "User" vs "Admin" access.
-* Protected routing ensuring unauthorized users cannot access Dashboard or Admin Panels.
-
----
-
-## 🛠 Tech Stack
-
-### Frontend
-* **Vite + React (TypeScript)**: Fast, modern client scaffolding.
-* **Tailwind CSS v4**: Utility-first styling for a beautiful, responsive, professional interface.
-* **React-Map-GL (v8) & Mapbox**: Interactive mapping and marker clustering.
-* **Lucide React**: Clean, modern iconography.
-* **Axios & React Query**: For robust data fetching and API communication.
-
-### Backend
-* **Node.js + Express**: REST API infrastructure.
-* **TypeORM**: Object-Relational Mapping for robust database interactions.
-* **PostgreSQL + PostGIS**: Relational database with advanced spatial extension for coordinates and radius logic.
-
----
-
-## 📂 Project Structure
-
-```text
-CREH/
-├── backend/
-│   ├── src/
-│   │   ├── controllers/      # Business logic (Auth, Chat, Requests, Resources, Reviews)
-│   │   ├── entity/           # TypeORM DB Models (User, Resource, Request, Message, Dispute, Review)
-│   │   ├── routes/           # Express Route Definitions
-│   │   ├── index.ts          # Express Server Setup & Static File Serving
-│   │   ├── data-source.ts    # PostgreSQL / TypeORM Configuration
-│   │   └── seed.ts           # Mock Data Generator (Geospatial sample items & Admin accounts)
-│   └── uploads/              # Local storage for user-uploaded product/chat images
-│
-└── frontend/
-    ├── src/
-    │   ├── components/       # Reusable UI (Layout, Navbar, ChatModal)
-    │   ├── pages/            
-    │   │   ├── LandingPage.tsx    # Hero intro page
-    │   │   ├── DiscoveryPage.tsx  # Mapbox interface and radius filtering
-    │   │   ├── DashboardPage.tsx  # User inventory, active lending/borrowing tracking
-    │   │   ├── AdminDashboard.tsx # Dispute mediation and override rules
-    │   │   └── AuthPage.tsx       # JWT Login/Signup
-    │   └── App.tsx           # React Router DOM configuration
-    └── index.html
+# 3. Frontend (new terminal)
+cd frontend
+cp .env.example .env            # set VITE_MAPBOX_TOKEN
+npm install
+npm run dev                     # http://localhost:5173
 ```
 
----
+**Already have a dev database created by an older version of this repo** (schema auto-synced, no migrations table)? The baseline migration will fail because the tables exist. Easiest fix: drop and recreate the database, then run the steps above. Seed data is disposable.
 
-## 🧪 Default Test Accounts
-If the database was seeded via `npm run seed`, the following accounts are available:
+### Test accounts (after `npm run seed`)
+| Role | Email | Password |
+|---|---|---|
+| Admin | `admin@creh.com` | `admin` |
+| Member | `test@creh.com` | `test` |
 
-**Admin:**
-* **Email:** `admin@creh.com`
-* **Password:** `admin`
+Admin access is controlled by the `role` column on `users`, not by email.
 
-**Standard User:**
-* **Email:** `test@creh.com`
-* **Password:** `test`
+## Scripts
+| Where | Command | What it does |
+|---|---|---|
+| backend | `npm run dev` | Start API with auto-reload |
+| backend | `npm run typecheck` | TypeScript check (also `lint` alias) |
+| backend | `npm run migration:run` / `migration:revert` | Apply / roll back migrations |
+| backend | `npm run migration:generate -- src/migration/Name` | Generate a migration from entity changes |
+| backend | `npm run seed` | Insert sample data |
+| frontend | `npm run dev` / `build` / `lint` | Dev server, production build, oxlint |
 
-*(You can also freely create your own standard user accounts via the Sign Up tab).*
+## API overview
+All routes are under `/api`. Everything except register, login, nearby search and a user's public reviews requires `Authorization: Bearer <token>`. Identity always comes from the token, never from the request body.
+
+| Area | Endpoints |
+|---|---|
+| Auth | `POST /auth/register`, `POST /auth/login` |
+| Resources | `GET /resources/nearby?lat&lng&radiusKm&category`, `POST /resources`, `GET /users/me/resources` |
+| Requests | `POST /requests`, `GET /users/me/requests`, `POST /requests/:id/{accept,pay,return,review-return}` |
+| Chat | `GET/POST /requests/:id/messages` (participants; admins only for disputed exchanges) |
+| Reviews | `POST /reviews`, `GET /users/:id/reviews` |
+| Admin | `GET /disputes`, `POST /disputes/:id/resolve` |
+| Dev only | `POST /resources/seed` (when `ENABLE_DEV_ROUTES=true`) |
+
+Errors use one shape: `{ "error": "message", "details"?: [...] }`.
+
+## Configuration
+Backend (`backend/.env`, see `.env.example`): DB settings, **`JWT_SECRET` (required)**, `CORS_ORIGIN`, `ENABLE_DEV_ROUTES`, `LOG_LEVEL`.
+Frontend (`frontend/.env`): `VITE_API_URL`, `VITE_MAPBOX_TOKEN`, `VITE_ENABLE_MOCK_FALLBACK`.
+
+### Mock data fallback
+When the API is unreachable or returns a 5xx, read-only screens show sample data from `frontend/src/mocks/` with an amber **Demo data** badge. Actions (create, accept, pay...) never fake success. It is on in `npm run dev` and off in production builds unless `VITE_ENABLE_MOCK_FALLBACK=true`.
+
+## Project structure
+```text
+CREH/
+├── SPEC.md                    # Spec-driven development tracker
+├── docker-compose.yml         # PostGIS + Redis
+├── docs/manual-tests/         # Per-phase manual checklists
+├── backend/src/
+│   ├── config/                # env loading and validation
+│   ├── middleware/            # auth, validation, error handling
+│   ├── routes/                # route table
+│   ├── controllers/           # thin HTTP handlers
+│   ├── services/              # business rules (requests, resources, tokens, image storage)
+│   ├── schemas/               # Zod request schemas
+│   ├── entity/                # TypeORM models
+│   ├── migration/             # schema migrations
+│   └── seed.ts
+└── frontend/src/
+    ├── lib/api.ts             # axios instance (auth header, 401 handling)
+    ├── stores/authStore.ts    # session state
+    ├── mocks/                 # demo-data fixtures + withMockFallback
+    ├── components/, pages/
+    └── types.ts
+```
+
+## Current exchange lifecycle
+`PENDING -> ACCEPTED -> ACTIVE -> RETURNED_PENDING_REVIEW -> COMPLETED`, or `-> DISPUTED -> RESOLVED_REFUNDED / RESOLVED_PAID_TO_OWNER`. Each transition is restricted to the right party (owner, requester or admin) and the right current state. This will be reconciled with the PRD state machine in Phase 4.

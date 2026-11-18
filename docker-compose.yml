@@ -1,0 +1,28 @@
+# Local dev services: PostgreSQL + PostGIS and Redis (Redis is used from Phase 5 onward).
+#   docker compose up -d
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: creh-db
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_NAME:-creh}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - creh-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-creh}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: creh-redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  creh-db-data:

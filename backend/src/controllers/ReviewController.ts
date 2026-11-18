@@ -3,44 +3,32 @@ import { AppDataSource } from "../data-source";
 import { Review } from "../entity/Review";
 import { User } from "../entity/User";
 import { Request as RequestEntity } from "../entity/Request";
+import { assertReviewParties } from "../services/requestService";
 
 export const addReview = async (req: Request, res: Response) => {
-    try {
-        const { reviewerId, revieweeId, requestId, rating, comment } = req.body;
-        
-        const reviewRepo = AppDataSource.getRepository(Review);
-        const userRepo = AppDataSource.getRepository(User);
-        
-        const review = reviewRepo.create({
+    const { revieweeId, requestId, rating, comment } = req.valid!.body;
+    const reviewerId = req.user!.id;
+    await assertReviewParties(reviewerId, revieweeId, requestId);
+
+    const reviewRepo = AppDataSource.getRepository(Review);
+    const review = await reviewRepo.save(
+        reviewRepo.create({
             reviewer: { id: reviewerId } as User,
             reviewee: { id: revieweeId } as User,
             request: { id: requestId } as RequestEntity,
             rating,
-            comment
-        });
-
-        await reviewRepo.save(review);
-        
-        // Update user reputation logic would go here
-        
-        return res.status(201).json(review);
-    } catch (error) {
-        return res.status(500).json({ error: "Could not add review" });
-    }
+            comment,
+        })
+    );
+    // Reputation recompute lands in Phase 6.
+    res.status(201).json(review);
 };
 
 export const getUserReviews = async (req: Request, res: Response) => {
-    try {
-        const { userId } = req.params;
-        const reviewRepo = AppDataSource.getRepository(Review);
-        
-        const reviews = await reviewRepo.find({
-            where: { reviewee: { id: parseInt(userId as string) } },
-            relations: ["reviewer"]
-        });
-        
-        return res.json(reviews);
-    } catch (error) {
-        return res.status(500).json({ error: "Could not fetch reviews" });
-    }
+    const reviews = await AppDataSource.getRepository(Review).find({
+        where: { reviewee: { id: req.valid!.params.userId } },
+        relations: ["reviewer"],
+        order: { created_at: "DESC" },
+    });
+    res.json(reviews);
 };

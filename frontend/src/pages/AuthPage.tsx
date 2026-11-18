@@ -15,7 +15,8 @@ import {
   MessageCircle,
   Wrench,
 } from "lucide-react";
-import axios from "axios";
+import { api } from "../lib/api";
+import { useAuthStore } from "../stores/authStore";
 
 const inputCls =
   "w-full rounded-xl bg-white px-4 py-3.5 text-[15px] ring-1 ring-ink/15 transition placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-600";
@@ -30,6 +31,7 @@ export default function AuthPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const setSession = useAuthStore((st) => st.setSession);
 
   const isAdmin = role === "admin";
 
@@ -41,27 +43,28 @@ export default function AuthPage() {
       const endpoint = isLogin ? "/auth/login" : "/auth/register";
       const payload = isLogin ? { email, password } : { name, email, password };
 
-      const res = await axios.post(`${import.meta.env.VITE_API_URL}${endpoint}`, payload);
+      const res = await api.post(endpoint, payload);
       const user = res.data.user;
 
-      if (role === "admin" && user.email !== "admin@creh.com") {
+      if (role === "admin" && user.role !== "admin") {
         setError("This account doesn’t have admin privileges.");
         return;
       }
 
-      localStorage.setItem("token", res.data.token);
-      localStorage.setItem("user", JSON.stringify(user));
+      setSession(res.data.token, user);
 
-      if (user.email === "admin@creh.com" && role === "admin") {
+      if (user.role === "admin" && role === "admin") {
         navigate("/admin");
       } else {
         navigate("/profile");
       }
-    } catch (err) {
+    } catch (err: any) {
+      const data = err?.response?.data;
+      const detail = data?.details?.[0]?.message as string | undefined;
       setError(
         isLogin
           ? "We couldn’t sign you in. Check your email and password."
-          : "We couldn’t create your account. That email may already be in use."
+          : detail || data?.error || "We couldn’t create your account. Please try again."
       );
     } finally {
       setLoading(false);

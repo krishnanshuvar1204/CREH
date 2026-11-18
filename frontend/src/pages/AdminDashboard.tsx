@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import axios from "axios";
+import { api, apiError } from "../lib/api";
+import { withMockFallback } from "../mocks/withMockFallback";
+import { mockDisputes } from "../mocks/fixtures";
+import DemoBadge from "../components/DemoBadge";
+import { isAdmin as hasAdminRole, useAuthStore } from "../stores/authStore";
 import { Link } from "react-router-dom";
 import {
   ShieldAlert,
@@ -36,14 +40,15 @@ export default function AdminDashboard() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [toast, setToast] = useState("");
-  const userStr = localStorage.getItem("user");
-  const user = userStr ? JSON.parse(userStr) : null;
-  const isAdmin = user?.email === "admin@creh.com";
+  const user = useAuthStore((st) => st.user);
+  const isAdmin = hasAdminRole(user);
+  const [isMock, setIsMock] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const res = await axios.get(`${import.meta.env.VITE_API_URL}/disputes`);
+      const res = await withMockFallback(async () => (await api.get("/disputes")).data as any[], mockDisputes);
       setDisputes(res.data);
+      setIsMock(res.isMock);
     } catch (e) {
       console.error(e);
     } finally {
@@ -87,7 +92,7 @@ export default function AdminDashboard() {
     setSubmitting(true);
     setError("");
     try {
-      await axios.post(`${import.meta.env.VITE_API_URL}/disputes/${ruling.dispute.id}/resolve`, {
+      await api.post(`/disputes/${ruling.dispute.id}/resolve`, {
         refundRequester: ruling.refundRequester,
         adminNotes: notes.trim(),
       });
@@ -95,7 +100,7 @@ export default function AdminDashboard() {
       await load();
       setToast(`Dispute #${ruling.dispute.id} resolved.`);
     } catch (e) {
-      setError("We couldn’t resolve this dispute. Please try again.");
+      setError(apiError(e, "We couldn’t resolve this dispute. Please try again."));
     } finally {
       setSubmitting(false);
     }
@@ -124,6 +129,7 @@ export default function AdminDashboard() {
               <p className="mt-1 text-slate-600">Review each case, then rule on where the deposit goes.</p>
             </div>
           </div>
+          {isMock && <DemoBadge />}
           {!loading && open.length > 0 && (
             <p className="flex items-center gap-2 rounded-full bg-red-100 px-4 py-2 text-sm font-bold text-red-800">
               <AlertTriangle className="size-4" /> {open.length} open {open.length === 1 ? "case" : "cases"}

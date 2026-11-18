@@ -1,5 +1,5 @@
 import { AppDataSource } from "./data-source";
-import { User } from "./entity/User";
+import { User, UserRole } from "./entity/User";
 import { Resource } from "./entity/Resource";
 import * as bcrypt from "bcryptjs";
 
@@ -17,9 +17,13 @@ async function seed() {
             name: "Admin User",
             email: "admin@creh.com",
             password_hash: adminHash,
+            role: UserRole.ADMIN,
             location: { type: "Point", coordinates: [-122.42, 37.77] } as any,
             reputation_score: 5.0
         });
+        await userRepo.save(admin);
+    } else if (admin.role !== UserRole.ADMIN) {
+        admin.role = UserRole.ADMIN;
         await userRepo.save(admin);
     }
 
