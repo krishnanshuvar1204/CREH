@@ -51,3 +51,23 @@ export interface Dispute {
   request: ExchangeRequest;
   raised_by: PublicUser;
 }
+
+export type VerificationStatus = "unverified" | "email_verified" | "community_pending" | "community_verified";
+
+// GET /users/me
+export interface UserProfile {
+  id: number;
+  name: string;
+  email: string;
+  role: "member" | "admin";
+  verification_status: VerificationStatus;
+  phone: string | null;
+  address: string | null;
+  bio: string | null;
+  avatar_url: string | null;
+  reputation_score: string;
+  community_verification_note: string | null;
+  community_verification_submitted_at: string | null;
+  home_location: { lat: number; lng: number } | null;
+  created_at: string;
+}

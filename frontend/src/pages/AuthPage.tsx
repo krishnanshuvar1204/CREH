@@ -51,9 +51,11 @@ export default function AuthPage() {
         return;
       }
 
-      setSession(res.data.token, user);
+      setSession(res.data.token, res.data.refreshToken, user);
 
-      if (user.role === "admin" && role === "admin") {
+      if (user.verification_status === "unverified") {
+        navigate("/verify-email");
+      } else if (user.role === "admin" && role === "admin") {
         navigate("/admin");
       } else {
         navigate("/profile");
@@ -223,6 +225,7 @@ export default function AuthPage() {
                   required
                   autoComplete={isLogin ? "current-password" : "new-password"}
                   placeholder="••••••••"
+                  minLength={isLogin ? undefined : 8}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className={`${inputCls} pr-12`}
@@ -236,6 +239,9 @@ export default function AuthPage() {
                   {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
                 </button>
               </div>
+              {!isLogin && !isAdmin && (
+                <p className="mt-1.5 text-xs text-slate-500">At least 8 characters, with a letter and a number.</p>
+              )}
             </div>
 
             {error && (

@@ -33,14 +33,14 @@
 | Backend size | ~14 files, ~900 LOC, 5 controllers, 6 entities, 1 router file (rest of routes inline in `index.ts`) |
 | Frontend size | 5 pages + 2 components, ~2,300 LOC; UI polish is ahead of backend maturity |
 | Tests / CI / Docker / migrations | Testing policy: **manual by devs** (no automated suites). Phase 0 added: migrations (`synchronize` off), `docker-compose.yml`, lint/typecheck/build CI workflow, `docs/manual-tests/` |
-| Current phase | **Phase 0 — built, awaiting dev sign-off** (see §6). Snapshot sections 2–4 below describe the *original* audit baseline `58b8de5`; where Phase 0 changed things, the tracker rows are updated and marked. |
+| Current phase | **Phase 1 — built, awaiting dev sign-off** (Phase 0 also still awaiting sign-off; see §6). Snapshot sections 2–4 below describe the *original* audit baseline `58b8de5`; where Phase 0 changed things, the tracker rows are updated and marked. |
 | Mock data | Discovery already falls back to hard-coded mock items when the API fails; policy is to keep and formalise this (§7b) |
 
-**Overall v1 functional-requirement progress (34 FRs):** 2 done, 14 partial, 18 not started → **≈ 26 %** (done = 1, partial = 0.5).
+**Overall v1 functional-requirement progress (34 FRs):** 6 done, 13 partial, 15 not started → **≈ 37 %** (Phase 1 built, awaiting sign-off) (done = 1, partial = 0.5).
 
 | Epic | FRs | ✅ | 🟡 | ❌ | Approx. % |
 |---|---|---|---|---|---|
-| A Identity | 6 | 1 | 3 | 2 | 33 % |
+| A Identity | 6 | 5 | 1 | 0 | 92 % |
 | B Resources | 5 | 0 | 3 | 2 | 30 % |
 | C Discovery | 5 | 1 | 4 | 0 | 60 % |
 | D Requests | 6 | 0 | 4 | 2 | 33 % |
@@ -73,11 +73,11 @@
 | FR | Requirement (short) | Status | Evidence / gap |
 |---|---|---|---|
 | A-1 | Register w/ hashed password | ✅ | bcryptjs in `AuthController`. (No input validation, no password rules.) |
-| A-2 | Mandatory email verification | ❌ | No verify endpoint, no email provider, no `verification_status`; unverified users can list/request. |
-| A-3 | Profile (name, phone, address, avatar, bio) | ❌ | Only `name`; no `/users/me`, no profile UI. |
-| A-4 | Home location via pin/geocode | 🟡 | `User.location` exists but register hard-codes `[-122.4, 37.8]`; no setter endpoint/UI, no geocoding. |
-| A-5 | Community verification + badge | ❌ | Not modelled. |
-| A-6 | Short-lived JWT + rotating refresh; validate every protected route | 🟡 | **P0:** `requireAuth` middleware now validates the JWT on every protected route and loads the user. Still 1-day access token, no refresh/rotation (Phase 1). |
+| A-2 | Mandatory email verification | ✅ | **P1:** 6-digit code (hashed, 15 min, 5 attempts, 60 s resend cooldown) via `EmailProvider` (console/Resend); `POST /auth/verify`, `/auth/verify/resend`; `requireVerified` blocks create-listing and create-request. Awaiting sign-off. |
+| A-3 | Profile (name, phone, address, avatar, bio) | ✅ | **P1:** `GET/PATCH /users/me` + Settings page (avatar is base64 → local disk until Phase 2 image storage). Awaiting sign-off. |
+| A-4 | Home location via pin/geocode | ✅ | **P1:** `PUT /users/me/location` (pin or address via `Geocoder` adapter; Mapbox when `MAPBOX_ACCESS_TOKEN` set); register no longer hard-codes a location; Settings map picker. Discovery does not yet default to it (Phase 3, P3-04). Awaiting sign-off. |
+| A-5 | Community verification + badge | 🟡 | **P1:** submission endpoint + `community_pending` status + badge component. Approval is manual (SQL) until the Phase 7 admin UI. |
+| A-6 | Short-lived JWT + rotating refresh; validate every protected route | ✅ | **P0:** `requireAuth` on every protected route. **P1:** 15-min access token, hashed rotating refresh tokens with reuse detection, `/auth/refresh`, `/auth/logout`, frontend silent refresh; suspended/deleted users rejected. Awaiting sign-off. |
 | B-1 | Create resource w/ full field set | 🟡 | Has category, title, desc, 1 image, duration, radius, location, donation flag. Missing: `resource_type`, multiple images, owner edit. |
 | B-2 | Seven fixed categories | 🟡 | `category` is free text; UI uses ad-hoc list (Tools/Outdoors…). Not the PRD seven. |
 | B-3 | Signed direct-to-CDN uploads | ❌ | ⚠️ Base64 in JSON body (50 MB limit) → local disk. |
@@ -107,7 +107,7 @@
 ### Non-functional requirement status
 | NFR | Status | Note |
 |---|---|---|
-| Security (JWT verify, ownership, validation, parameterized queries) | 🟡 | **P0:** JWT middleware, ownership/role checks, Zod validation on all inputs, no secret fallback, CORS restricted, password hash and user home location no longer returned by the API, image type/size checks. Still missing: rate limiting, helmet, refresh tokens (Phases 1 and 8). |
+| Security (JWT verify, ownership, validation, parameterized queries) | 🟡 | **P1:** short-lived access + rotating refresh tokens, auth rate limiting, password policy. **P0:** JWT middleware, ownership/role checks, Zod validation on all inputs, no secret fallback, CORS restricted, password hash and user home location no longer returned by the API, image type/size checks. Still missing: rate limits on write endpoints, helmet (Phase 8). |
 | Privacy (obfuscated location until approval) | ❌ | Exact coordinates returned in discovery. |
 | Performance (P95 < 300 ms) | ❌ | Unmeasured; no cache. |
 | Observability | 🟡 | **P0:** pino structured logs with request id, `/api/health` checks the DB. No error tracking or metrics yet (Phase 8). |
@@ -129,7 +129,7 @@
 | V7 | Radius | metres, fixed set, `sharing_radius_m` | km decimal, free | Convert to fixed set in Phase 2/3. |
 | V8 | Images | `image_urls[]` via Cloudinary signed upload | single `image_url`, base64 → local disk | Phase 2. |
 | V9 | Resource status | `availability` + `deleted_at` | `status` (3 values) | Rename/extend in Phase 2. |
-| V10 | Users | role, verification_status, phone, address… | name/email/hash/rep/location/**role** | `role` and role-based admin checks done in P0; remaining fields in Phase 1. |
+| V10 | Users | role, verification_status, phone, address… | name/email/hash/rep/location/**role** | `role` (P0) and profile/verification/suspension fields (P1) done. |
 | V11 | Request fields | dates, due_date, timestamps, `owner_id` | none of these; owner via `resource.owner` | Phase 4. |
 | V12 | Map provider | Mapbox recommended | Mapbox ✅ | Aligned. |
 | V13 | Layering | modules: auth/users/resources/geo/requests… + services | ~~fat controllers, inline routes~~ → **resolved in P0**: routes → controllers → services, Zod schemas, middleware | Done (awaiting sign-off). |
@@ -159,7 +159,7 @@
 | Phase | Theme | PRD sprint | Remaining SP | Target date | Status |
 |---|---|---|---|---|---|
 | 0 | Stabilize & align foundation (new) | 0 (+ gaps) | ~0 (dev sign-off pending) | _TBD_ | 🟡 built, awaiting sign-off |
-| 1 | Identity & user management | 1 | ~20 | _TBD_ | 🟡 |
+| 1 | Identity & user management | 1 | ~0 (dev sign-off pending) | _TBD_ | 🟡 built, awaiting sign-off |
 | 2 | Resource sharing core | 2 | ~16 | _TBD_ | 🟡 |
 | 3 | Location-based discovery | 3 | ~12 | _TBD_ | 🟡 |
 | 4 | Request & exchange lifecycle | 4 | ~20 | _TBD_ | 🟡 |
@@ -194,15 +194,26 @@
 - Local setup needs a new `JWT_SECRET` in `backend/.env`; existing dev DBs must be recreated before running migrations (see README).
 
 ### Phase 1 — Identity & user management  *(FR-A-1…6)*
-- [ ] **P1-01** User schema: `phone, address, avatar_url, bio, verification_status, role, deleted/suspended_at`. *(2 SP)*
-- [ ] **P1-02** Email adapter (`EmailProvider` interface; console impl + Resend impl); verification code/token table; `POST /auth/verify`, resend. Block create-listing/request for `unverified`. *(8 SP, see D-004)*
-- [ ] **P1-03** Access token (15 min) + rotating refresh token (hashed in DB), `POST /auth/refresh`, logout/revoke; frontend silent refresh. *(5 SP)*
-- [ ] **P1-04** `GET/PATCH /users/me`; profile page UI (edit name, phone, bio, avatar). *(3 SP)*
-- [ ] **P1-05** `PUT /users/me/location`: map pin + Mapbox geocoding server-side; stop hard-coding register location; location setup step in onboarding. *(5 SP)*
-- [ ] **P1-06** Community verification submission + `POST /users/me/verify-community` + verified badge component. *(3 SP)*
-- [ ] **P1-07** Rate limit auth endpoints; password policy. *(1 SP)*
+- [~] **P1-01** User schema: `phone, address, avatar_url, bio, verification_status, role, deleted/suspended_at`. *(2 SP)*
+- [~] **P1-02** Email adapter (`EmailProvider` interface; console impl + Resend impl); verification code/token table; `POST /auth/verify`, resend. Block create-listing/request for `unverified`. *(8 SP, see D-004)*
+- [~] **P1-03** Access token (15 min) + rotating refresh token (hashed in DB), `POST /auth/refresh`, logout/revoke; frontend silent refresh. *(5 SP)*
+- [~] **P1-04** `GET/PATCH /users/me`; profile page UI (edit name, phone, bio, avatar). *(3 SP)*
+- [~] **P1-05** `PUT /users/me/location`: map pin + Mapbox geocoding server-side; stop hard-coding register location; location setup step in onboarding. *(5 SP)*
+- [~] **P1-06** Community verification submission + `POST /users/me/verify-community` + verified badge component. *(3 SP)*
+- [~] **P1-07** Rate limit auth endpoints; password policy. *(1 SP)*
 
 **Exit:** register → receive email → verify → set home location → see profile with badge.
+
+**Build notes / deviations (2026-11-24):**
+- Checklist: [docs/manual-tests/phase-1.md](docs/manual-tests/phase-1.md). A dev runs it, ticks it, then flips `[~]` → `[x]`.
+- Migration `Phase1Identity` adds the user columns, `email_verifications` and `refresh_tokens`. Existing users are **grandfathered as `email_verified`**; the old hard-coded placeholder home location is cleared. Seed users are pre-verified.
+- D-004 default applied: `EMAIL_PROVIDER=console` (code printed in the API log) or `resend` (needs `RESEND_API_KEY`, `EMAIL_FROM`). Geocoding is an adapter too: Mapbox server-side when `MAPBOX_ACCESS_TOKEN` is set, otherwise address search returns 503 and users drop a pin / use browser geolocation.
+- Verification statuses: `unverified → email_verified → community_pending → community_verified`. Community approval has no admin UI yet (Phase 7); approve by SQL for now. Submission requires a verified email and a saved home location.
+- Auth responses now return `{ token, refreshToken, user }`; `POST /auth/verify` and `/auth/verify/resend` require a (not necessarily verified) session. Login deliberately does **not** enforce the new password policy, so seeded `test`/`admin` passwords still work.
+- Refresh tokens: opaque, SHA-256 hashed, 30-day TTL (`REFRESH_TOKEN_TTL_DAYS`), single-use; re-using a rotated token revokes its whole family. Logout revokes the family. Tokens are kept in `localStorage` (same exposure as the old access token); httpOnly cookies are a Phase 8 hardening option. Sessions created before this change have no refresh token and need one re-login.
+- `JWT_EXPIRES_IN` default is now `15m`. Rate limits are in-memory per process (fine for one API instance; revisit with Redis in Phase 8) and can be disabled with `RATE_LIMIT_ENABLED=false`.
+- Discovery still centres on the map pan position; defaulting to the saved home location is P3-04. Avatar upload reuses the base64 local-disk path until Phase 2.
+- Not changed: soft-delete/suspend have no endpoints yet (columns exist and are enforced at auth; admin tooling is Phase 7).
 
 ### Phase 2 — Resource sharing core  *(FR-B-1…5)*
 - [ ] **P2-01** Migration: `resource_type`, `image_urls[]`, `availability` (+`RESERVED`), `deleted_at`, `sharing_radius_m` (500/1000/2000/5000), category enum (7 PRD categories; migrate existing free-text values). *(5 SP)*
@@ -298,3 +309,4 @@ Automated test suites (see §7a), native apps, AI recommendations, QR handover, 
 | 2026-11-17 | — | Initial audit and SPEC created from commit `58b8de5` | code review |
 | 2026-11-18 | Phase 0 | P0-01…P0-10 built (auth middleware, services/routes split, Zod, env, migrations, roles, docker-compose + CI, pino, frontend api/store/mocks, README). Marked `[~]`. | AI-run: backend `tsc` clean; frontend `tsc -b` + `vite build` pass; 47/47 curl checks against a throwaway PostGIS DB (auth, validation, ownership, lifecycle, admin gating, no hash leak). **Dev sign-off of docs/manual-tests/phase-0.md still required.** |
 | 2026-11-18 | Policy | Testing switched to manual (D-007, §7a); mock-data fallback adopted (D-008, §7b); tasks P0-07, P0-09, P3-05, P4-03, P8-03 adjusted | spec edit |
+| 2026-11-24 | Phase 1 | P1-01…P1-07 built (identity schema + migration, email verification via EmailProvider, rotating refresh tokens + silent refresh, `/users/me` profile, home location with Geocoder adapter, community verification submission + badge, auth rate limits + password policy, verify-email and Settings pages). Marked `[~]`. | AI-run: backend `tsc` clean; frontend `tsc -b` and `vite build` pass, oxlint shows no warnings in touched files; curl checks against a throwaway PostGIS DB: migration up, weak-password rejection, 403 on listing/request while unverified then 201 after verify, wrong-code attempt lockout, resend 429 cooldown, refresh rotation + reuse revocation + logout revoke, profile PATCH/validation, pin location save + coordinate validation, 503 geocode without token, community_pending flow, suspended user 403 (token + login), login limiter 429 after repeated failures. **Not browser-tested** (new pages, silent refresh, map picker); **dev sign-off of docs/manual-tests/phase-1.md required.** |

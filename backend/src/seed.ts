@@ -1,5 +1,5 @@
 import { AppDataSource } from "./data-source";
-import { User, UserRole } from "./entity/User";
+import { User, UserRole, VerificationStatus } from "./entity/User";
 import { Resource } from "./entity/Resource";
 import * as bcrypt from "bcryptjs";
 
@@ -18,6 +18,8 @@ async function seed() {
             email: "admin@creh.com",
             password_hash: adminHash,
             role: UserRole.ADMIN,
+            verification_status: VerificationStatus.EMAIL_VERIFIED,
+            email_verified_at: new Date(),
             location: { type: "Point", coordinates: [-122.42, 37.77] } as any,
             reputation_score: 5.0
         });
@@ -35,6 +37,8 @@ async function seed() {
             name: "Test User",
             email: "test@creh.com",
             password_hash: testHash,
+            verification_status: VerificationStatus.EMAIL_VERIFIED,
+            email_verified_at: new Date(),
             location: { type: "Point", coordinates: [-122.41, 37.78] } as any,
             reputation_score: 4.9
         });

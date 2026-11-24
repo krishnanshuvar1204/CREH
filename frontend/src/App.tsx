@@ -5,6 +5,8 @@ import DiscoveryPage from "./pages/DiscoveryPage";
 import AuthPage from "./pages/AuthPage";
 import DashboardPage from "./pages/DashboardPage";
 import AdminDashboard from "./pages/AdminDashboard";
+import VerifyEmailPage from "./pages/VerifyEmailPage";
+import SettingsPage from "./pages/SettingsPage";
 
 import LandingPage from "./pages/LandingPage";
 
@@ -20,6 +22,8 @@ function App() {
             <Route index element={<LandingPage />} />
             <Route path="discover" element={<DiscoveryPage />} />
             <Route path="profile" element={<DashboardPage />} />
+            <Route path="verify-email" element={<VerifyEmailPage />} />
+            <Route path="settings" element={<SettingsPage />} />
             <Route path="admin" element={<AdminDashboard />} />
           </Route>
         </Routes>

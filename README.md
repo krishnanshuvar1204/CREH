@@ -42,6 +42,8 @@ npm run dev                     # http://localhost:5173
 
 Admin access is controlled by the `role` column on `users`, not by email.
 
+New registrations must verify their email before listing items or sending requests. With the default `EMAIL_PROVIDER=console`, the 6-digit code is printed in the API terminal. Seeded accounts are pre-verified.
+
 ## Scripts
 | Where | Command | What it does |
 |---|---|---|
@@ -53,11 +55,12 @@ Admin access is controlled by the `role` column on `users`, not by email.
 | frontend | `npm run dev` / `build` / `lint` | Dev server, production build, oxlint |
 
 ## API overview
-All routes are under `/api`. Everything except register, login, nearby search and a user's public reviews requires `Authorization: Bearer <token>`. Identity always comes from the token, never from the request body.
+All routes are under `/api`. Everything except register, login, refresh, logout, nearby search and a user's public reviews requires `Authorization: Bearer <token>`. Identity always comes from the token, never from the request body.
 
 | Area | Endpoints |
 |---|---|
-| Auth | `POST /auth/register`, `POST /auth/login` |
+| Auth | `POST /auth/register`, `POST /auth/login`, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/verify`, `POST /auth/verify/resend` |
+| Users | `GET/PATCH /users/me`, `PUT /users/me/location`, `POST /users/me/verify-community` |
 | Resources | `GET /resources/nearby?lat&lng&radiusKm&category`, `POST /resources`, `GET /users/me/resources` |
 | Requests | `POST /requests`, `GET /users/me/requests`, `POST /requests/:id/{accept,pay,return,review-return}` |
 | Chat | `GET/POST /requests/:id/messages` (participants; admins only for disputed exchanges) |
@@ -68,7 +71,7 @@ All routes are under `/api`. Everything except register, login, nearby search an
 Errors use one shape: `{ "error": "message", "details"?: [...] }`.
 
 ## Configuration
-Backend (`backend/.env`, see `.env.example`): DB settings, **`JWT_SECRET` (required)**, `CORS_ORIGIN`, `ENABLE_DEV_ROUTES`, `LOG_LEVEL`.
+Backend (`backend/.env`, see `.env.example`): DB settings, **`JWT_SECRET` (required)**, `JWT_EXPIRES_IN` (15m), `REFRESH_TOKEN_TTL_DAYS`, `EMAIL_PROVIDER` (`console` prints verification codes in the API log; `resend` needs `RESEND_API_KEY`), `MAPBOX_ACCESS_TOKEN` (optional, address search), `RATE_LIMIT_ENABLED`, `CORS_ORIGIN`, `ENABLE_DEV_ROUTES`, `LOG_LEVEL`.
 Frontend (`frontend/.env`): `VITE_API_URL`, `VITE_MAPBOX_TOKEN`, `VITE_ENABLE_MOCK_FALLBACK`.
 
 ### Mock data fallback
@@ -85,7 +88,8 @@ CREH/
 │   ├── middleware/            # auth, validation, error handling
 │   ├── routes/                # route table
 │   ├── controllers/           # thin HTTP handlers
-│   ├── services/              # business rules (requests, resources, tokens, image storage)
+│   ├── services/              # business rules (requests, resources, tokens, verification, users, image storage)
+│   ├── adapters/              # third-party seams: email (console/Resend), geocoder (Mapbox/none)
 │   ├── schemas/               # Zod request schemas
 │   ├── entity/                # TypeORM models
 │   ├── migration/             # schema migrations

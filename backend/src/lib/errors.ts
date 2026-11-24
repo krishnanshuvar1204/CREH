@@ -9,3 +9,4 @@ export const unauthorized = (msg = "Authentication required") => new HttpError(4
 export const forbidden = (msg = "You do not have permission to do that") => new HttpError(403, msg);
 export const notFound = (msg = "Not found") => new HttpError(404, msg);
 export const conflict = (msg: string) => new HttpError(409, msg);
+export const tooManyRequests = (msg: string) => new HttpError(429, msg);
