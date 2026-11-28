@@ -32,6 +32,8 @@ import { mockResources } from "../mocks/fixtures";
 import DemoBadge from "../components/DemoBadge";
 import { useAuthStore } from "../stores/authStore";
 
+import { CATEGORIES, categoryLabel, imageSrc } from "../lib/resourceMeta";
+
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 const categoryIcons: Record<string, any> = {
@@ -121,10 +123,7 @@ export default function DiscoveryPage() {
   const resources: any[] = useMemo(() => result?.data ?? [], [result]);
   const isMock = result?.isMock ?? false;
 
-  const categories = useMemo(
-    () => ["All", ...Array.from(new Set<string>(resources.map((r: any) => r.category).filter(Boolean)))],
-    [resources]
-  );
+  const categories = useMemo(() => [{ value: "All", label: "All" }, ...CATEGORIES], []);
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -137,7 +136,7 @@ export default function DiscoveryPage() {
       .filter((r: any) => {
         if (category !== "All" && r.category !== category) return false;
         if (freeOnly && !r.is_donation) return false;
-        if (q && !`${r.title} ${r.description} ${r.category}`.toLowerCase().includes(q)) return false;
+        if (q && !`${r.title} ${r.description} ${categoryLabel(r.category)}`.toLowerCase().includes(q)) return false;
         return true;
       })
       .sort((a: any, b: any) => (a._km ?? 1e9) - (b._km ?? 1e9));
@@ -207,14 +206,14 @@ export default function DiscoveryPage() {
           <div className="-mx-5 flex gap-2 overflow-x-auto px-5 pb-1 [scrollbar-width:none]">
             {categories.map((c) => (
               <button
-                key={c}
-                onClick={() => setCategory(c)}
-                aria-pressed={category === c}
+                key={c.value}
+                onClick={() => setCategory(c.value)}
+                aria-pressed={category === c.value}
                 className={`shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition ${
-                  category === c ? "bg-ink text-white" : "bg-white ring-1 ring-ink/10 hover:ring-emerald-600"
+                  category === c.value ? "bg-ink text-white" : "bg-white ring-1 ring-ink/10 hover:ring-emerald-600"
                 }`}
               >
-                {c}
+                {c.label}
               </button>
             ))}
           </div>
@@ -294,9 +293,9 @@ export default function DiscoveryPage() {
                 >
                   <span
                     className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-xl bg-emerald-100 text-emerald-700 bg-cover bg-center"
-                    style={resource.image_url ? { backgroundImage: `url(http://localhost:5000${resource.image_url})` } : undefined}
+                    style={resource.image_urls?.[0] ? { backgroundImage: `url(${imageSrc(resource.image_urls[0])})` } : undefined}
                   >
-                    {!resource.image_url && <Icon className="size-7" />}
+                    {!resource.image_urls?.[0] && <Icon className="size-7" />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start justify-between gap-2">
@@ -315,7 +314,7 @@ export default function DiscoveryPage() {
                         {resource.is_donation ? <Gift className="size-3.5" /> : <Clock className="size-3.5" />}
                         {resource.is_donation ? "Free" : `${resource.lending_duration_days} days`}
                       </span>
-                      <span className="text-slate-500">{resource.category}</span>
+                      <span className="text-slate-500">{categoryLabel(resource.category)}</span>
                       {resource.owner && (
                         <span className="ml-auto flex items-center gap-1 text-amber-700">
                           <Star className="size-3.5 fill-current" /> {resource.owner.reputation}
@@ -401,12 +400,12 @@ export default function DiscoveryPage() {
             <div
               className="relative flex h-44 shrink-0 items-end bg-emerald-600 bg-cover bg-center p-6 sm:h-52"
               style={
-                selectedResource.image_url
-                  ? { backgroundImage: `url(http://localhost:5000${selectedResource.image_url})` }
+                selectedResource.image_urls?.[0]
+                  ? { backgroundImage: `url(${imageSrc(selectedResource.image_urls[0])})` }
                   : undefined
               }
             >
-              {selectedResource.image_url ? (
+              {selectedResource.image_urls?.[0] ? (
                 <div className="absolute inset-0 bg-gradient-to-t from-ink/85 to-transparent" />
               ) : (
                 <>
@@ -432,7 +431,7 @@ export default function DiscoveryPage() {
                 <X className="size-5" />
               </button>
               <div className="relative z-10">
-                <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-emerald-900">{selectedResource.category}</span>
+                <span className="rounded-full bg-white/90 px-3 py-1 text-xs font-bold text-emerald-900">{categoryLabel(selectedResource.category)}</span>
                 <h2 className="mt-2 text-3xl font-extrabold leading-tight tracking-tight text-white">{selectedResource.title}</h2>
               </div>
             </div>

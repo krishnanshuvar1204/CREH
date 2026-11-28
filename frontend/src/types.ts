@@ -7,16 +7,21 @@ export interface PublicUser {
   reputation?: number;
 }
 
+export type ResourceCategory = "tools" | "electronics" | "outdoors" | "furniture" | "kitchen" | "books" | "other";
+export type ResourceAvailability = "AVAILABLE" | "RESERVED" | "BORROWED" | "UNAVAILABLE";
+export type ResourceType = "LOAN" | "DONATION";
+
 export interface Resource {
   id: number;
   title: string;
   description: string;
-  category: string;
+  category: ResourceCategory;
+  resource_type: ResourceType;
   is_donation: boolean;
   lending_duration_days: number | null;
-  sharing_radius_km?: number;
-  image_url?: string | null;
-  status?: "AVAILABLE" | "BORROWED" | "UNAVAILABLE";
+  sharing_radius_m: number;
+  image_urls: string[];
+  availability: ResourceAvailability;
   location: { type?: "Point"; coordinates: [number, number] }; // [lng, lat]
   owner?: PublicUser;
 }

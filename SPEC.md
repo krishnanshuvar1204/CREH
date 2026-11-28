@@ -33,15 +33,15 @@
 | Backend size | ~14 files, ~900 LOC, 5 controllers, 6 entities, 1 router file (rest of routes inline in `index.ts`) |
 | Frontend size | 5 pages + 2 components, ~2,300 LOC; UI polish is ahead of backend maturity |
 | Tests / CI / Docker / migrations | Testing policy: **manual by devs** (no automated suites). Phase 0 added: migrations (`synchronize` off), `docker-compose.yml`, lint/typecheck/build CI workflow, `docs/manual-tests/` |
-| Current phase | **Phase 1 — built, awaiting dev sign-off** (Phase 0 also still awaiting sign-off; see §6). Snapshot sections 2–4 below describe the *original* audit baseline `58b8de5`; where Phase 0 changed things, the tracker rows are updated and marked. |
+| Current phase | **Phase 2 — built, awaiting dev sign-off** (Phases 0 and 1 also still awaiting sign-off; see §6). Snapshot sections 2–4 below describe the *original* audit baseline `58b8de5`; where Phase 0 changed things, the tracker rows are updated and marked. |
 | Mock data | Discovery already falls back to hard-coded mock items when the API fails; policy is to keep and formalise this (§7b) |
 
-**Overall v1 functional-requirement progress (34 FRs):** 6 done, 13 partial, 15 not started → **≈ 37 %** (Phase 1 built, awaiting sign-off) (done = 1, partial = 0.5).
+**Overall v1 functional-requirement progress (34 FRs):** 10 done, 9 partial, 15 not started → **≈ 44 %** (Phases 1–2 built, awaiting sign-off) (done = 1, partial = 0.5).
 
 | Epic | FRs | ✅ | 🟡 | ❌ | Approx. % |
 |---|---|---|---|---|---|
 | A Identity | 6 | 5 | 1 | 0 | 92 % |
-| B Resources | 5 | 0 | 3 | 2 | 30 % |
+| B Resources | 5 | 4 | 1 | 0 | 90 % |
 | C Discovery | 5 | 1 | 4 | 0 | 60 % |
 | D Requests | 6 | 0 | 4 | 2 | 33 % |
 | E Notifications | 4 | 0 | 0 | 4 | 0 % |
@@ -78,11 +78,11 @@
 | A-4 | Home location via pin/geocode | ✅ | **P1:** `PUT /users/me/location` (pin or address via `Geocoder` adapter; Mapbox when `MAPBOX_ACCESS_TOKEN` set); register no longer hard-codes a location; Settings map picker. Discovery does not yet default to it (Phase 3, P3-04). Awaiting sign-off. |
 | A-5 | Community verification + badge | 🟡 | **P1:** submission endpoint + `community_pending` status + badge component. Approval is manual (SQL) until the Phase 7 admin UI. |
 | A-6 | Short-lived JWT + rotating refresh; validate every protected route | ✅ | **P0:** `requireAuth` on every protected route. **P1:** 15-min access token, hashed rotating refresh tokens with reuse detection, `/auth/refresh`, `/auth/logout`, frontend silent refresh; suspended/deleted users rejected. Awaiting sign-off. |
-| B-1 | Create resource w/ full field set | 🟡 | Has category, title, desc, 1 image, duration, radius, location, donation flag. Missing: `resource_type`, multiple images, owner edit. |
-| B-2 | Seven fixed categories | 🟡 | `category` is free text; UI uses ad-hoc list (Tools/Outdoors…). Not the PRD seven. |
-| B-3 | Signed direct-to-CDN uploads | ❌ | ⚠️ Base64 in JSON body (50 MB limit) → local disk. |
-| B-4 | Edit / pause / soft-delete | ❌ | No PATCH/DELETE, no `deleted_at`. |
-| B-5 | Availability AVAILABLE/RESERVED/BORROWED/UNAVAILABLE | 🟡 | Enum has 3 values; no `RESERVED`. |
+| B-1 | Create resource w/ full field set | ✅ | **P2:** title, description, category enum, `resource_type`, up to 5 images, `sharing_radius_m`, duration, location; owner edit via `PATCH`. Awaiting sign-off. |
+| B-2 | Seven fixed categories | ✅ | **P2:** DB enum + Zod + UI chips/select use one fixed list (see D-009 for the assumed seven); old free text migrated. Awaiting sign-off. |
+| B-3 | Signed direct-to-CDN uploads | ✅ | **P2:** `ImageStorage` adapter + `POST /resources/:id/images/sign`; Cloudinary signed upload when `CLOUDINARY_*` set, else local-disk fallback (D-004). Cloudinary path not exercised without an account. Awaiting sign-off. |
+| B-4 | Edit / pause / soft-delete | ✅ | **P2:** `PATCH`/`DELETE /resources/:id` with owner checks, pause/resume, `deleted_at` soft delete (history kept, pending requests declined, blocked while an exchange is open). Awaiting sign-off. |
+| B-5 | Availability AVAILABLE/RESERVED/BORROWED/UNAVAILABLE | 🟡 | **P2:** column renamed `availability`, `RESERVED` added. Nothing sets RESERVED until the Phase 4 approval flow. |
 | C-1 | Map of nearby resources | ✅ | `DiscoveryPage` + `/resources/nearby`. (Uses pan center, not a persisted home location.) |
 | C-2 | Radius ∈ {0.5,1,2,5 km} | 🟡 | Free slider (default 15 km, `radiusKm` arbitrary); backend default 5 km, no validation. |
 | C-3 | Filter by category **and availability** | 🟡 | Category filter is client-side on loaded set; backend only returns `AVAILABLE`; no availability filter. |
@@ -126,9 +126,9 @@
 | V4 | IDs | UUID PKs | Auto-increment ints | See D-003. Default: keep ints (changing is churn with low value). |
 | V5 | Status naming | lowercase/`APPROVED`, `BORROWED`, `RETURNED` | `ACCEPTED`, `ACTIVE`, `RETURNED_PENDING_REVIEW` | Map in Phase 4 (migration + frontend labels). |
 | V6 | Geo column | `GEOGRAPHY(Point,4326)` | `geometry` + cast | Fix in Phase 3. |
-| V7 | Radius | metres, fixed set, `sharing_radius_m` | km decimal, free | Convert to fixed set in Phase 2/3. |
-| V8 | Images | `image_urls[]` via Cloudinary signed upload | single `image_url`, base64 → local disk | Phase 2. |
-| V9 | Resource status | `availability` + `deleted_at` | `status` (3 values) | Rename/extend in Phase 2. |
+| V7 | Radius | metres, fixed set, `sharing_radius_m` | ~~km decimal, free~~ → **P2:** `sharing_radius_m` in {500,1000,2000,5000}. Discovery search radius is still a free km slider until Phase 3. | Done for sharing radius (awaiting sign-off). |
+| V8 | Images | `image_urls[]` via Cloudinary signed upload | ~~single `image_url`~~ → **P2:** `image_urls[]` + signed-upload adapter (resources). Avatars/chat still base64 → local disk. | Done for resources (awaiting sign-off). |
+| V9 | Resource status | `availability` + `deleted_at` | ~~`status`~~ → **P2:** `availability` (+`RESERVED`) and `deleted_at`. | Done (awaiting sign-off). |
 | V10 | Users | role, verification_status, phone, address… | name/email/hash/rep/location/**role** | `role` (P0) and profile/verification/suspension fields (P1) done. |
 | V11 | Request fields | dates, due_date, timestamps, `owner_id` | none of these; owner via `resource.owner` | Phase 4. |
 | V12 | Map provider | Mapbox recommended | Mapbox ✅ | Aligned. |
@@ -148,6 +148,7 @@
 | D-005 | Timeline / team size (PRD assumes 9 × 2-week sprints for a pair) | Solo, phases are effort-based, no fixed dates until set in §6 | **OPEN** |
 | D-006 | Distance unit exposure (km in UI vs metres in API) | UI shows m/km, API uses metres | **OPEN** |
 | D-007 | Testing approach | **Manual testing by devs**; no automated test suites in v1. Supersedes PRD §12 | **DECIDED** |
+| D-009 | The PRD seven categories and `resource_type` values are not in the repo | **Assumed** categories `tools, electronics, outdoors, furniture, kitchen, books, other` and `resource_type` in `LOAN, DONATION` (kept in sync with `is_donation`). If the PRD differs: change one enum, `frontend/src/lib/resourceMeta.ts`, and add a migration | **ASSUMED — please confirm** |
 | D-008 | Failure behaviour of frontend data calls | **Fall back to mock data** (labelled "Demo data") instead of error-only screens | **DECIDED** |
 
 ---
@@ -160,7 +161,7 @@
 |---|---|---|---|---|---|
 | 0 | Stabilize & align foundation (new) | 0 (+ gaps) | ~0 (dev sign-off pending) | _TBD_ | 🟡 built, awaiting sign-off |
 | 1 | Identity & user management | 1 | ~0 (dev sign-off pending) | _TBD_ | 🟡 built, awaiting sign-off |
-| 2 | Resource sharing core | 2 | ~16 | _TBD_ | 🟡 |
+| 2 | Resource sharing core | 2 | ~0 (dev sign-off pending) | _TBD_ | 🟡 built, awaiting sign-off |
 | 3 | Location-based discovery | 3 | ~12 | _TBD_ | 🟡 |
 | 4 | Request & exchange lifecycle | 4 | ~20 | _TBD_ | 🟡 |
 | 5 | Notifications | 5 | 21 | _TBD_ | ❌ |
@@ -216,11 +217,23 @@
 - Not changed: soft-delete/suspend have no endpoints yet (columns exist and are enforced at auth; admin tooling is Phase 7).
 
 ### Phase 2 — Resource sharing core  *(FR-B-1…5)*
-- [ ] **P2-01** Migration: `resource_type`, `image_urls[]`, `availability` (+`RESERVED`), `deleted_at`, `sharing_radius_m` (500/1000/2000/5000), category enum (7 PRD categories; migrate existing free-text values). *(5 SP)*
-- [ ] **P2-02** `GET /resources/:id`, `PATCH`, `DELETE` (soft) with ownership checks; pause/resume (`UNAVAILABLE`). *(5 SP)*
-- [ ] **P2-03** `ImageStorage` adapter + `POST /resources/:id/images/sign` (Cloudinary signed upload); migrate off base64/local `uploads/` for resources (chat attachments may stay local until D-002 resolved). *(6 SP)*
-- [ ] **P2-04** Frontend: create/edit listing form (7 categories, type, multi-image, radius from fixed set, duration/donation, pin on map), edit/pause/delete actions on dashboard. *(5 SP)*
-- [ ] **P2-05** Validation: only email-verified users may create. *(1 SP)*
+- [~] **P2-01** Migration `Phase2Resources`: `resource_type`, `image_urls[]`, `availability` (+`RESERVED`), `deleted_at`, `sharing_radius_m` (500/1000/2000/5000, CHECK constraint), category enum (7 values; existing free text mapped). *(5 SP)*
+- [~] **P2-02** `GET /resources/:id`, `PATCH`, `DELETE` (soft) with ownership checks; pause/resume (`UNAVAILABLE`); `GET /resources/options`. *(5 SP)*
+- [~] **P2-03** `ImageStorage` adapter + `POST /resources/:id/images/sign`, `POST/DELETE /resources/:id/images`; Cloudinary signed upload with local fallback. *(6 SP)*
+- [~] **P2-04** Frontend: shared create/edit form (7 categories, type, multi-image, radius from fixed set, duration, map pin / use my location), edit/pause/delete on dashboard, Discovery uses fixed categories and `image_urls`. *(5 SP)*
+- [~] **P2-05** Only email-verified users may create, edit or add images (delete stays allowed). *(1 SP)*
+
+**Exit:** a verified user can create, edit, pause/resume and delete a listing with several photos; deleted items vanish from discovery but keep request history.
+
+**Build notes / deviations (2026-11-28):**
+- Checklist: [docs/manual-tests/phase-2.md](docs/manual-tests/phase-2.md). A dev runs it, ticks it, then flips `[~]` → `[x]`.
+- Migration is data-preserving and reversible. Existing km radii are rounded up to the next allowed value and capped at 5 km, so old 10-20 km listings become 5 km. Discovery's own search radius (free km slider) is unchanged until Phase 3.
+- Listing creation no longer accepts `imageBase64`; the client creates the item, then attaches photos (`sign` → direct upload → `POST /images`, or base64 on the local provider). A failed photo upload leaves the item saved and tells the user to retry via Edit.
+- `owns(url)` guards `POST /images {url}` so only our storage URLs can be attached. Cloudinary assets are not deleted remotely when a photo is removed (needs the admin API); local files are.
+- Request history uses `withDeleted` so exchanges for a soft-deleted item still load. Deleting declines PENDING requests; ACCEPTED/ACTIVE/RETURNED_PENDING_REVIEW/DISPUTED block deletion (409).
+- `GET /resources/*` returns only public owner fields (`id`, `name`, `reputation_score`). Exact-location obfuscation is still Phase 3 (P3-03).
+- D-009 (category list and `resource_type` values) is an assumption and needs the owner to confirm against the PRD.
+- Noted, not changed: `/users/me/requests` returns the counterparty's full user object (email, phone, etc.). This predates Phase 2; tighten it in Phase 4 (requests rework) or the Phase 8 security pass.
 
 ### Phase 3 — Location-based discovery  *(FR-C-1…5)*
 - [ ] **P3-01** Migrate `location` columns to `geography(Point,4326)` + GiST index; update queries. *(3 SP)*
@@ -310,3 +323,4 @@ Automated test suites (see §7a), native apps, AI recommendations, QR handover, 
 | 2026-11-18 | Phase 0 | P0-01…P0-10 built (auth middleware, services/routes split, Zod, env, migrations, roles, docker-compose + CI, pino, frontend api/store/mocks, README). Marked `[~]`. | AI-run: backend `tsc` clean; frontend `tsc -b` + `vite build` pass; 47/47 curl checks against a throwaway PostGIS DB (auth, validation, ownership, lifecycle, admin gating, no hash leak). **Dev sign-off of docs/manual-tests/phase-0.md still required.** |
 | 2026-11-18 | Policy | Testing switched to manual (D-007, §7a); mock-data fallback adopted (D-008, §7b); tasks P0-07, P0-09, P3-05, P4-03, P8-03 adjusted | spec edit |
 | 2026-11-24 | Phase 1 | P1-01…P1-07 built (identity schema + migration, email verification via EmailProvider, rotating refresh tokens + silent refresh, `/users/me` profile, home location with Geocoder adapter, community verification submission + badge, auth rate limits + password policy, verify-email and Settings pages). Marked `[~]`. | AI-run: backend `tsc` clean; frontend `tsc -b` and `vite build` pass, oxlint shows no warnings in touched files; curl checks against a throwaway PostGIS DB: migration up, weak-password rejection, 403 on listing/request while unverified then 201 after verify, wrong-code attempt lockout, resend 429 cooldown, refresh rotation + reuse revocation + logout revoke, profile PATCH/validation, pin location save + coordinate validation, 503 geocode without token, community_pending flow, suspended user 403 (token + login), login limiter 429 after repeated failures. **Not browser-tested** (new pages, silent refresh, map picker); **dev sign-off of docs/manual-tests/phase-1.md required.** |
+| 2026-11-28 | Phase 2 | P2-01…P2-05 built (resource schema migration, CRUD + pause + soft delete, image storage adapter with Cloudinary signing + local fallback, shared create/edit form, dashboard actions, Discovery updated). Marked `[~]`. | AI-run: backend `tsc` clean; frontend `tsc -b` + `vite build` pass. Against a throwaway PostGIS container: Phase 2 migration up/down/up on legacy rows (category/radius/image mapping correct); curl checks for enum/radius validation (400), unverified create (403), stranger PATCH/DELETE/images (403), public GET without owner email, nearby honours pause/resume and owner radius, base64 image add/remove (file deleted), foreign-URL rejection, 5-photo cap, soft delete keeps request history and hides the item, pending request auto-declined, ACCEPTED request blocks delete (409). **Not browser-tested** (form modal, map pin, dashboard actions); Cloudinary path untested (no account); **dev sign-off of docs/manual-tests/phase-2.md required.** |

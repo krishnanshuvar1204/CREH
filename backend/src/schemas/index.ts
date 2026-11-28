@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ResourceCategory, ResourceType, SHARING_RADII_M } from "../entity/Resource";
 
 const id = z.coerce.number().int().positive();
 const imageData = z.string().max(12 * 1024 * 1024);
@@ -59,23 +60,51 @@ export const communityVerificationSchema = z.object({
 });
 
 // ---- Resources ----
+const category = z.enum(ResourceCategory);
+const radiusM = z.coerce
+    .number()
+    .refine((v) => (SHARING_RADII_M as readonly number[]).includes(v), "Radius must be 500, 1000, 2000 or 5000 metres");
+const lngLat = z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) });
+const duration = z.coerce.number().int().min(1).max(365);
+
 export const nearbyQuerySchema = z.object({
     lat: z.coerce.number().min(-90).max(90),
     lng: z.coerce.number().min(-180).max(180),
     radiusKm: z.coerce.number().min(0.1).max(100).default(5),
-    category: z.string().trim().min(1).max(60).optional(),
+    category: category.optional(),
 });
 
 export const createResourceSchema = z.object({
     title: z.string().trim().min(1).max(150),
     description: z.string().trim().min(1).max(2000),
-    category: z.string().trim().min(1).max(60),
-    sharing_radius_km: z.coerce.number().min(0.1).max(100).default(5),
-    lending_duration_days: z.coerce.number().int().min(0).max(365).nullish().transform((v) => v ?? undefined),
-    is_donation: z.boolean().default(false),
-    location: z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }),
-    imageBase64: imageData.nullish(),
+    category,
+    resource_type: z.enum(ResourceType).default(ResourceType.LOAN),
+    sharing_radius_m: radiusM.default(2000),
+    lending_duration_days: duration.nullish().transform((v) => v ?? undefined),
+    location: lngLat,
 });
+
+// Owner edit. `availability` only toggles pause/resume; RESERVED/BORROWED are driven by the request flow.
+export const updateResourceSchema = z
+    .object({
+        title: z.string().trim().min(1).max(150),
+        description: z.string().trim().min(1).max(2000),
+        category,
+        resource_type: z.enum(ResourceType),
+        sharing_radius_m: radiusM,
+        lending_duration_days: duration.nullable(),
+        location: lngLat,
+        availability: z.enum(["AVAILABLE", "UNAVAILABLE"]),
+    })
+    .partial()
+    .refine((v) => Object.keys(v).length > 0, "Nothing to update");
+
+// Attach an image: either base64 (local storage) or a URL returned by a signed direct upload.
+export const addResourceImageSchema = z
+    .object({ imageBase64: imageData.optional(), url: z.url().max(500).optional() })
+    .refine((v) => !!v.imageBase64 !== !!v.url, "Provide either imageBase64 or url");
+
+export const removeResourceImageSchema = z.object({ url: z.string().min(1).max(500) });
 
 export const seedNearMeSchema = z.object({
     lat: z.number().min(-90).max(90),

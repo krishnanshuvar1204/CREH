@@ -6,7 +6,19 @@ import { validate } from "../middleware/validate";
 import * as schemas from "../schemas";
 import { login, logout, refresh, register, resendVerification, verifyEmail } from "../controllers/AuthController";
 import { getMe, setLocation, updateMe, verifyCommunity } from "../controllers/UserController";
-import { createResource, getMyResources, getNearbyResources, seedNearMe } from "../controllers/ResourceController";
+import {
+    addImage,
+    createResource,
+    deleteResource,
+    getMyResources,
+    getNearbyResources,
+    getResource,
+    getResourceOptions,
+    removeImage,
+    seedNearMe,
+    signImageUpload,
+    updateResource,
+} from "../controllers/ResourceController";
 import {
     acceptRequest,
     createRequest,
@@ -22,6 +34,7 @@ import { getMessages, sendMessage } from "../controllers/ChatController";
 
 const router = Router();
 const requestIdParams = validate(schemas.idParam("requestId"), "params");
+const resourceIdParams = validate(schemas.idParam("resourceId"), "params");
 
 // ---- Auth (public) ----
 router.post("/auth/register", registerLimiter, validate(schemas.registerSchema), register);
@@ -35,7 +48,34 @@ router.post("/auth/verify/resend", requireAuth, verifyLimiter, resendVerificatio
 
 // ---- Resources ----
 router.get("/resources/nearby", validate(schemas.nearbyQuerySchema, "query"), getNearbyResources);
+router.get("/resources/options", getResourceOptions);
 router.post("/resources", requireAuth, requireVerified, validate(schemas.createResourceSchema), createResource);
+router.get("/resources/:resourceId", resourceIdParams, getResource);
+router.patch(
+    "/resources/:resourceId",
+    requireAuth,
+    requireVerified,
+    resourceIdParams,
+    validate(schemas.updateResourceSchema),
+    updateResource
+);
+router.delete("/resources/:resourceId", requireAuth, resourceIdParams, deleteResource);
+router.post("/resources/:resourceId/images/sign", requireAuth, requireVerified, resourceIdParams, signImageUpload);
+router.post(
+    "/resources/:resourceId/images",
+    requireAuth,
+    requireVerified,
+    resourceIdParams,
+    validate(schemas.addResourceImageSchema),
+    addImage
+);
+router.delete(
+    "/resources/:resourceId/images",
+    requireAuth,
+    resourceIdParams,
+    validate(schemas.removeResourceImageSchema),
+    removeImage
+);
 if (env.ENABLE_DEV_ROUTES) {
     router.post("/resources/seed", requireAuth, validate(schemas.seedNearMeSchema), seedNearMe);
 }

@@ -6,10 +6,12 @@ import {
   ShieldAlert,
   CheckCircle,
   ArrowLeftRight,
-  X,
+  Pencil,
+  Pause,
+  Play,
+  Trash2,
   Plus,
   MessageCircle,
-  ImagePlus,
   Loader2,
   Check,
   Inbox,
@@ -24,6 +26,8 @@ import DemoBadge from "../components/DemoBadge";
 import { isAdmin as hasAdminRole, useAuthStore } from "../stores/authStore";
 import { Link, useNavigate } from "react-router-dom";
 import ChatModal from "../components/ChatModal";
+import ResourceFormModal from "../components/ResourceFormModal";
+import { categoryLabel, imageSrc, radiusLabel } from "../lib/resourceMeta";
 
 type Tab = "borrowing" | "lending" | "items";
 
@@ -58,11 +62,10 @@ export default function DashboardPage() {
   const [myResources, setMyResources] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("borrowing");
-  const [isAddingResource, setIsAddingResource] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<any>(null);
+  const [deleting, setDeleting] = useState<any>(null);
   const [activeChat, setActiveChat] = useState<any>(null);
-  const [resourceImageBase64, setResourceImageBase64] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [toast, setToast] = useState<{ text: string; tone: "ok" | "err" } | null>(null);
   const [reporting, setReporting] = useState<number | null>(null);
@@ -140,59 +143,46 @@ export default function DashboardPage() {
     setReportReason("");
   };
 
-  const handleResourceImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setResourceImageBase64(reader.result as string);
-      reader.readAsDataURL(file);
+  const closeForm = () => {
+    setFormOpen(false);
+    setEditing(null);
+  };
+
+  const onSaved = async (message: string, ok = true) => {
+    closeForm();
+    await load();
+    setTab("items");
+    setToast({ text: message, tone: ok ? "ok" : "err" });
+  };
+
+  const toggleAvailability = async (res: any) => {
+    const next = res.availability === "AVAILABLE" ? "UNAVAILABLE" : "AVAILABLE";
+    setBusyId(res.id);
+    try {
+      await api.patch(`/resources/${res.id}`, { availability: next });
+      await load();
+      setToast({ text: next === "UNAVAILABLE" ? "Item paused. Neighbors can’t see it." : "Item is live again.", tone: "ok" });
+    } catch (e) {
+      setToast({ text: apiError(e, "Couldn’t update the item."), tone: "err" });
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const closeAddModal = () => {
-    setIsAddingResource(false);
-    setFormError("");
-    setResourceImageBase64(null);
-  };
-
-  const handleAddResource = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const formData = new FormData(e.currentTarget);
-    setFormError("");
-
-    if (!navigator.geolocation) {
-      setFormError("Geolocation isn’t supported by your browser.");
-      return;
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    const res = deleting;
+    setDeleting(null);
+    setBusyId(res.id);
+    try {
+      await api.delete(`/resources/${res.id}`);
+      await load();
+      setToast({ text: "Item deleted.", tone: "ok" });
+    } catch (e) {
+      setToast({ text: apiError(e, "Couldn’t delete the item."), tone: "err" });
+    } finally {
+      setBusyId(null);
     }
-    setIsSubmitting(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          await api.post("/resources", {
-            title: formData.get("title"),
-            description: formData.get("description"),
-            category: formData.get("category"),
-            sharing_radius_km: Number(formData.get("radius")),
-            lending_duration_days: Number(formData.get("duration")),
-            is_donation: formData.get("type") === "donation",
-            location: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-            imageBase64: resourceImageBase64,
-          });
-          closeAddModal();
-          await load();
-          setTab("items");
-          setToast({ text: "Your item is live for the community.", tone: "ok" });
-        } catch (err) {
-          setFormError(apiError(err, "We couldn’t list your item. Please try again."));
-        } finally {
-          setIsSubmitting(false);
-        }
-      },
-      () => {
-        setIsSubmitting(false);
-        setFormError("Location access is needed so neighbors can find your item.");
-      }
-    );
   };
 
   const myBorrowing = requests.filter((r: any) => r.requester.id === user.id);
@@ -312,7 +302,7 @@ export default function DashboardPage() {
               </button>
             )}
             {isMock && <DemoBadge className="self-center" />}
-            <button onClick={() => setIsAddingResource(true)} className="flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-white transition duration-300 hover:-translate-y-0.5">
+            <button onClick={() => setFormOpen(true)} className="flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-bold text-white transition duration-300 hover:-translate-y-0.5">
               <Plus className="size-4" /> Share an item
             </button>
           </div>
@@ -379,38 +369,66 @@ export default function DashboardPage() {
             <Empty
               title="Your shelf is empty"
               text="Help your community by sharing something that’s collecting dust."
-              action={<button onClick={() => setIsAddingResource(true)} className={btnPrimary}><Plus className="size-4" /> Share an item</button>}
+              action={<button onClick={() => setFormOpen(true)} className={btnPrimary}><Plus className="size-4" /> Share an item</button>}
             />
           ) : (
             <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-              {myResources.map((res: any) => (
-                <li key={res.id} className="overflow-hidden rounded-2xl bg-white ring-1 ring-ink/10 transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_36px_-20px_rgba(11,42,34,0.35)]">
-                  <div
-                    className="relative grid h-32 place-items-center bg-emerald-100 bg-cover bg-center text-emerald-700"
-                    style={res.image_url ? { backgroundImage: `url(http://localhost:5000${res.image_url})` } : undefined}
-                  >
-                    {!res.image_url && <Package className="size-10 opacity-60" />}
-                    <span
-                      className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-xs font-bold ${
-                        res.status === "AVAILABLE" ? "bg-emerald-600 text-white" : "bg-ink/80 text-white"
-                      }`}
+              {myResources.map((res: any) => {
+                const cover = imageSrc(res.image_urls?.[0]);
+                const livePaused = res.availability === "AVAILABLE" || res.availability === "UNAVAILABLE";
+                const busy = busyId === res.id;
+                const label =
+                  res.availability === "AVAILABLE"
+                    ? "Available"
+                    : res.availability === "UNAVAILABLE"
+                      ? "Paused"
+                      : res.availability.charAt(0) + res.availability.slice(1).toLowerCase();
+                return (
+                  <li key={res.id} className="flex flex-col overflow-hidden rounded-2xl bg-white ring-1 ring-ink/10 transition duration-300 hover:-translate-y-1 hover:shadow-[0_20px_36px_-20px_rgba(11,42,34,0.35)]">
+                    <div
+                      className="relative grid h-32 place-items-center bg-emerald-100 bg-cover bg-center text-emerald-700"
+                      style={cover ? { backgroundImage: `url(${cover})` } : undefined}
                     >
-                      {res.status === "AVAILABLE" ? "Available" : res.status}
-                    </span>
-                  </div>
-                  <div className="p-5">
-                    <h3 className="font-display text-lg font-bold leading-tight">{res.title}</h3>
-                    <p className="mt-1 line-clamp-2 text-sm text-slate-600">{res.description}</p>
-                    <div className="mt-4 flex items-center justify-between text-xs font-semibold">
-                      <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800">{res.category}</span>
-                      <span className="flex items-center gap-1 text-slate-600">
-                        {res.is_donation ? <Gift className="size-3.5" /> : <Clock className="size-3.5" />}
-                        {res.is_donation ? "Donation" : `${res.lending_duration_days} days`}
+                      {!cover && <Package className="size-10 opacity-60" />}
+                      <span
+                        className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-xs font-bold ${
+                          res.availability === "AVAILABLE" ? "bg-emerald-600 text-white" : "bg-ink/80 text-white"
+                        }`}
+                      >
+                        {label}
                       </span>
+                      {res.image_urls?.length > 1 && (
+                        <span className="absolute right-3 top-3 rounded-full bg-ink/70 px-2 py-1 text-xs font-bold text-white">{res.image_urls.length} photos</span>
+                      )}
                     </div>
-                  </div>
-                </li>
-              ))}
+                    <div className="flex flex-1 flex-col p-5">
+                      <h3 className="font-display text-lg font-bold leading-tight">{res.title}</h3>
+                      <p className="mt-1 line-clamp-2 text-sm text-slate-600">{res.description}</p>
+                      <div className="mt-4 flex items-center justify-between gap-2 text-xs font-semibold">
+                        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-emerald-800">{categoryLabel(res.category)}</span>
+                        <span className="flex items-center gap-1 text-slate-600">
+                          {res.is_donation ? <Gift className="size-3.5" /> : <Clock className="size-3.5" />}
+                          {res.is_donation ? "Donation" : `${res.lending_duration_days} days`} · {radiusLabel(res.sharing_radius_m)}
+                        </span>
+                      </div>
+                      <div className="mt-4 flex gap-2 border-t border-ink/5 pt-4">
+                        <button onClick={() => setEditing(res)} disabled={busy} className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-white px-3 py-2 text-sm font-bold ring-1 ring-ink/15 transition hover:ring-emerald-600 disabled:opacity-60">
+                          <Pencil className="size-3.5" /> Edit
+                        </button>
+                        {livePaused && (
+                          <button onClick={() => toggleAvailability(res)} disabled={busy} className="flex flex-1 items-center justify-center gap-1.5 rounded-full bg-white px-3 py-2 text-sm font-bold ring-1 ring-ink/15 transition hover:ring-emerald-600 disabled:opacity-60">
+                            {busy ? <Loader2 className="size-3.5 animate-spin" /> : res.availability === "AVAILABLE" ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
+                            {res.availability === "AVAILABLE" ? "Pause" : "Resume"}
+                          </button>
+                        )}
+                        <button onClick={() => setDeleting(res)} disabled={busy} aria-label="Delete item" className="grid size-10 shrink-0 place-items-center rounded-full text-red-700 ring-1 ring-red-200 transition hover:bg-red-50 disabled:opacity-60">
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>
@@ -457,94 +475,19 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Add Resource Modal */}
-      {isAddingResource && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-ink/50 backdrop-blur-sm sm:items-center sm:p-4" onClick={closeAddModal}>
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Share a new item"
-            onClick={(e) => e.stopPropagation()}
-            className="rise flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[2rem] bg-cream shadow-[0_40px_80px_-20px_rgba(11,42,34,0.6)] sm:rounded-[2rem]"
-          >
-            <div className="flex items-center justify-between border-b border-ink/10 px-7 py-5">
-              <div>
-                <h2 className="text-2xl font-extrabold tracking-tight">Share an item</h2>
-                <p className="text-sm text-slate-600">Neighbors within your radius will see it.</p>
-              </div>
-              <button onClick={closeAddModal} aria-label="Close" className="grid size-10 place-items-center rounded-full text-slate-500 transition hover:bg-ink/5">
-                <X className="size-5" />
-              </button>
+      {/* Create / edit item */}
+      {(formOpen || editing) && <ResourceFormModal resource={editing ?? undefined} onClose={closeForm} onSaved={onSaved} />}
+
+      {/* Delete confirmation */}
+      {deleting && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm" onClick={() => setDeleting(null)}>
+          <div role="dialog" aria-modal="true" aria-label="Delete item" onClick={(e) => e.stopPropagation()} className="rise w-full max-w-md rounded-3xl bg-cream p-7 shadow-[0_40px_80px_-20px_rgba(11,42,34,0.6)]">
+            <h2 className="text-2xl font-extrabold tracking-tight">Delete &ldquo;{deleting.title}&rdquo;?</h2>
+            <p className="mt-1 text-sm text-slate-600">It disappears from discovery and pending requests are declined. Past exchanges stay in your history.</p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button onClick={() => setDeleting(null)} className={btnGhost}>Keep it</button>
+              <button onClick={confirmDelete} className="rounded-full bg-red-600 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-red-700">Delete item</button>
             </div>
-
-            <form onSubmit={handleAddResource} className="space-y-4 overflow-y-auto p-7">
-              <div>
-                <label htmlFor="title" className="mb-1.5 block text-sm font-semibold">Title</label>
-                <input id="title" name="title" required placeholder="e.g. Cordless power drill" className={inputCls} />
-              </div>
-              <div>
-                <label htmlFor="description" className="mb-1.5 block text-sm font-semibold">Description</label>
-                <textarea id="description" name="description" required placeholder="Condition, what’s included…" className={inputCls} rows={3}></textarea>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="category" className="mb-1.5 block text-sm font-semibold">Category</label>
-                  <select id="category" name="category" className={inputCls}>
-                    <option>Tools</option>
-                    <option>Electronics</option>
-                    <option>Outdoors</option>
-                    <option>Furniture</option>
-                    <option>Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="type" className="mb-1.5 block text-sm font-semibold">Type</label>
-                  <select id="type" name="type" className={inputCls}>
-                    <option value="borrow">Lend for borrowing</option>
-                    <option value="donation">Permanent donation</option>
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label htmlFor="radius" className="mb-1.5 block text-sm font-semibold">Radius (km)</label>
-                  <input id="radius" name="radius" type="number" defaultValue="5" min="1" className={inputCls} />
-                </div>
-                <div>
-                  <label htmlFor="duration" className="mb-1.5 block text-sm font-semibold">Duration (days)</label>
-                  <input id="duration" name="duration" type="number" defaultValue="3" min="1" className={inputCls} />
-                </div>
-              </div>
-
-              <div>
-                <span className="mb-1.5 block text-sm font-semibold">Photo</span>
-                <label className="relative flex h-32 cursor-pointer items-center justify-center overflow-hidden rounded-xl border border-dashed border-ink/25 bg-white text-slate-500 transition hover:border-emerald-600 hover:text-emerald-700">
-                  {resourceImageBase64 ? (
-                    <img src={resourceImageBase64} alt="Preview" className="absolute inset-0 size-full object-cover" />
-                  ) : (
-                    <span className="flex items-center gap-2 text-sm font-semibold">
-                      <ImagePlus className="size-5" /> Add a photo
-                    </span>
-                  )}
-                  <input type="file" accept="image/*" onChange={handleResourceImageUpload} className="sr-only" />
-                </label>
-              </div>
-
-              {formError && (
-                <p role="alert" className="flex items-start gap-2 rounded-xl bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
-                  <AlertTriangle className="mt-0.5 size-4 shrink-0" /> {formError}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={isSubmitting}
-                className="flex w-full items-center justify-center gap-2 rounded-full bg-emerald-600 py-4 font-bold text-white shadow-[0_14px_28px_-12px_rgba(5,150,105,0.8)] transition hover:bg-emerald-700 disabled:opacity-60"
-              >
-                {isSubmitting && <Loader2 className="size-5 animate-spin" />}
-                {isSubmitting ? "Listing…" : "List item for the community"}
-              </button>
-            </form>
           </div>
         </div>
       )}

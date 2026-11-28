@@ -1,6 +1,6 @@
 import { AppDataSource } from "../data-source";
 import { Request, RequestStatus } from "../entity/Request";
-import { Resource, ResourceStatus } from "../entity/Resource";
+import { Resource, ResourceAvailability } from "../entity/Resource";
 import { Dispute } from "../entity/Dispute";
 import { User, UserRole } from "../entity/User";
 import { badRequest, conflict, forbidden, notFound } from "../lib/errors";
@@ -11,6 +11,7 @@ const loadRequest = async (id: number): Promise<Request> => {
     const r = await requests().findOne({
         where: { id },
         relations: ["resource", "resource.owner", "requester"],
+        withDeleted: true, // history keeps showing items their owner later removed
     });
     if (!r) throw notFound("Request not found");
     return r;
@@ -32,7 +33,7 @@ export const createRequest = async (userId: number, resourceId: number, deposit?
     });
     if (!resource) throw notFound("Resource not found");
     if (resource.owner.id === userId) throw badRequest("Cannot request your own resource");
-    if (resource.status !== ResourceStatus.AVAILABLE) throw conflict("Resource is not available");
+    if (resource.availability !== ResourceAvailability.AVAILABLE) throw conflict("Resource is not available");
 
     const duplicate = await requests().findOne({
         where: { resource: { id: resourceId }, requester: { id: userId }, status: RequestStatus.PENDING },
@@ -67,7 +68,7 @@ export const payDeposit = async (userId: number, requestId: number) => {
         r.deposit_paid = true;
         r.status = RequestStatus.ACTIVE;
         await em.save(r);
-        await em.update(Resource, { id: r.resource.id }, { status: ResourceStatus.BORROWED });
+        await em.update(Resource, { id: r.resource.id }, { availability: ResourceAvailability.BORROWED });
         return r;
     });
 };
@@ -91,7 +92,7 @@ export const ownerReviewReturn = async (userId: number, requestId: number, isOk:
         if (isOk) {
             r.status = RequestStatus.COMPLETED;
             await em.save(r);
-            await em.update(Resource, { id: r.resource.id }, { status: ResourceStatus.AVAILABLE });
+            await em.update(Resource, { id: r.resource.id }, { availability: ResourceAvailability.AVAILABLE });
             return { message: "Returned OK. Deposit refunded to requester.", request: r };
         }
         r.status = RequestStatus.DISPUTED;
@@ -111,6 +112,7 @@ export const resolveDispute = async (disputeId: number, refundRequester: boolean
     const dispute = await AppDataSource.getRepository(Dispute).findOne({
         where: { id: disputeId },
         relations: ["request", "request.resource"],
+        withDeleted: true,
     });
     if (!dispute) throw notFound("Dispute not found");
     if (dispute.status !== "OPEN") throw conflict("Dispute is already resolved");
@@ -127,7 +129,7 @@ export const resolveDispute = async (disputeId: number, refundRequester: boolean
         await em.update(
             Resource,
             { id: r.resource.id },
-            { status: refundRequester ? ResourceStatus.AVAILABLE : ResourceStatus.UNAVAILABLE }
+            { availability: refundRequester ? ResourceAvailability.AVAILABLE : ResourceAvailability.UNAVAILABLE }
         );
         return { message: "Dispute resolved", dispute };
     });
@@ -137,12 +139,14 @@ export const listForUser = (userId: number) =>
     requests().find({
         where: [{ requester: { id: userId } }, { resource: { owner: { id: userId } } }],
         relations: ["resource", "resource.owner", "requester"],
+        withDeleted: true, // history keeps showing items their owner later removed
         order: { created_at: "DESC" },
     });
 
 export const listDisputes = () =>
     AppDataSource.getRepository(Dispute).find({
         relations: ["request", "request.resource", "request.requester", "raised_by"],
+        withDeleted: true,
         order: { created_at: "DESC" },
     });
 

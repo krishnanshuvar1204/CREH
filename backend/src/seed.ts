@@ -1,6 +1,6 @@
 import { AppDataSource } from "./data-source";
 import { User, UserRole, VerificationStatus } from "./entity/User";
-import { Resource } from "./entity/Resource";
+import { Resource, ResourceCategory, ResourceType } from "./entity/Resource";
 import * as bcrypt from "bcryptjs";
 
 async function seed() {
@@ -53,9 +53,9 @@ async function seed() {
                 owner: admin,
                 title: "Professional DSLR Camera",
                 description: "Canon EOS 5D Mark IV. Great for weekend shoots. Security deposit required.",
-                category: "Electronics",
+                category: ResourceCategory.ELECTRONICS,
                 location: { type: "Point", coordinates: [-122.425, 37.775] } as any,
-                sharing_radius_km: 10,
+                sharing_radius_m: 5000,
                 lending_duration_days: 5,
                 is_donation: false
             },
@@ -63,9 +63,9 @@ async function seed() {
                 owner: testUser,
                 title: "Makita Power Drill Set",
                 description: "Includes drill, batteries, and bit set. Please return fully charged.",
-                category: "Tools",
+                category: ResourceCategory.TOOLS,
                 location: { type: "Point", coordinates: [-122.415, 37.785] } as any,
-                sharing_radius_km: 5,
+                sharing_radius_m: 5000,
                 lending_duration_days: 3,
                 is_donation: false
             },
@@ -73,11 +73,12 @@ async function seed() {
                 owner: admin,
                 title: "Folding Tables (x2)",
                 description: "Perfect for garage sales or community events. Free to borrow.",
-                category: "Furniture",
+                category: ResourceCategory.FURNITURE,
                 location: { type: "Point", coordinates: [-122.430, 37.770] } as any,
-                sharing_radius_km: 20,
+                sharing_radius_m: 5000,
                 lending_duration_days: 2,
-                is_donation: true
+                is_donation: true,
+                resource_type: ResourceType.DONATION
             }
         ]);
         console.log("Seeded database with sample resources!");

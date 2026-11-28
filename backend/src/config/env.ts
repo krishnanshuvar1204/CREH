@@ -24,6 +24,10 @@ export const env = {
     EMAIL_FROM: process.env.EMAIL_FROM || "CREH <onboarding@resend.dev>",
     RESEND_API_KEY: process.env.RESEND_API_KEY || "",
     MAPBOX_ACCESS_TOKEN: process.env.MAPBOX_ACCESS_TOKEN || "",
+    // Image storage adapter: Cloudinary signed uploads when all three are set, otherwise local disk (dev).
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME || "",
+    CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || "",
+    CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || "",
     // Rate limiting can be disabled for manual load/regression runs.
     RATE_LIMIT_ENABLED: (process.env.RATE_LIMIT_ENABLED ?? "true") === "true",
     // Comma separated list of allowed browser origins.
